@@ -757,11 +757,20 @@ app.get('/api/connections', async (req, res) => {
   }
 });
 
-/** 断开所有或单个连接 */
-app.delete('/api/connections/:id?', async (req, res) => {
+/** 断开所有连接 */
+app.delete('/api/connections', async (req, res) => {
   try {
-    const subpath = req.params.id ? `/${encodeURIComponent(req.params.id)}` : '';
-    await clashApi(`/connections${subpath}`, { method: 'DELETE' });
+    await clashApi('/connections', { method: 'DELETE' });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(502).json({ ok: false, error: err.message });
+  }
+});
+
+/** 断开指定连接 */
+app.delete('/api/connections/:id', async (req, res) => {
+  try {
+    await clashApi(`/connections/${encodeURIComponent(req.params.id)}`, { method: 'DELETE' });
     res.json({ ok: true });
   } catch (err) {
     res.status(502).json({ ok: false, error: err.message });
