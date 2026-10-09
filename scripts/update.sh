@@ -73,8 +73,16 @@ COMMIT=$(curl -fsSL "https://api.github.com/repos/$REPO/commits/$BRANCH" 2>/dev/
 
 say "更新依赖"
 cd "$ROOT"
-if command -v npm >/dev/null 2>&1; then
-  npm install --omit=dev --no-audit --no-fund >/dev/null 2>&1 || say "npm install 有告警，继续"
+# Node 是随包放在 $ROOT/node 的，npm 经常不在 PATH 里（之前因此静默跳过安装，
+# 新依赖如 ws 永远装不上，导致面板 crash loop）。先按绝对路径找 npm。
+NPM_BIN=""
+for c in "$ROOT/node/bin/npm" "$(command -v npm 2>/dev/null)"; do
+  if [ -n "$c" ] && [ -x "$c" ]; then NPM_BIN="$c"; break; fi
+done
+if [ -n "$NPM_BIN" ]; then
+  "$NPM_BIN" install --omit=dev --no-audit --no-fund >/dev/null 2>&1 || say "npm install 有告警，继续"
+else
+  say "没找到 npm，跳过依赖更新（package.json 新增的依赖不会自动装）"
 fi
 
 if [ -f /etc/openwrt_release ]; then

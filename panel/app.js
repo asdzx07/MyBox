@@ -254,6 +254,8 @@ function fmtSpeed(bps) {
 }
 
 let trafficTimer = null;
+const trafficHist = { up: [], down: [] };
+const HIST_LEN = 60;
 async function loadTraffic() {
   try {
     const t = await api('/traffic');
@@ -262,7 +264,48 @@ async function loadTraffic() {
     $('statDown').textContent = t.connected ? fmtSpeed(t.down) : '—';
     $('statTotalUp').textContent = fmtBytes(t.totalUp);
     $('statTotalDown').textContent = fmtBytes(t.totalDown);
+    // 曲线
+    trafficHist.up.push(t.connected ? t.up : 0);
+    trafficHist.down.push(t.connected ? t.down : 0);
+    if (trafficHist.up.length > HIST_LEN) trafficHist.up.shift();
+    if (trafficHist.down.length > HIST_LEN) trafficHist.down.shift();
+    drawTrafficChart();
   } catch {}
+}
+
+function drawTrafficChart() {
+  const cv = $('trafficChart');
+  if (!cv) return;
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = 120;
+  cv.width = w * dpr; cv.height = h * dpr;
+  const ctx = cv.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
+  const max = Math.max(1, ...trafficHist.up, ...trafficHist.down);
+  const draw = (data, color, fill) => {
+    if (!data.length) return;
+    ctx.beginPath();
+    data.forEach((v, i) => {
+      const x = (i / (HIST_LEN - 1)) * w;
+      const y = h - 8 - (v / max) * (h - 20);
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    });
+    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
+    if (fill) {
+      ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath();
+      const g = ctx.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, color + '44'); g.addColorStop(1, color + '00');
+      ctx.fillStyle = g; ctx.fill();
+    }
+  };
+  // 网格线
+  ctx.strokeStyle = 'rgba(128,128,128,.12)'; ctx.lineWidth = 1;
+  for (let i = 1; i < 4; i++) {
+    ctx.beginPath(); ctx.moveTo(0, (h / 4) * i); ctx.lineTo(w, (h / 4) * i); ctx.stroke();
+  }
+  draw(trafficHist.down, '#a78bfa', true);
+  draw(trafficHist.up, '#38bdf8', true);
 }
 function startTrafficPoll() {
   if (trafficTimer) return;
@@ -277,7 +320,7 @@ async function loadOverview() {
     const data = await api('/overview');
     $('brandVersion').textContent = data.kernel.version || '';
     $('statKernel').textContent = data.kernel.running ? '运行中' : (data.kernel.installed ? '已停止' : '未安装');
-    $('statKernel').style.color = data.kernel.running ? 'var(--ok)' : 'var(--err)';
+    $('heroDot').className = 'dot ' + (data.kernel.running ? 'on' : 'off');
     $('statVersion').textContent = data.kernel.version || '—';
     $('statNodes').textContent = data.counts.nodes;
     $('statPolicies').textContent = `${data.counts.policiesEnabled} / ${data.counts.policies}`;

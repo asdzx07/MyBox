@@ -56,21 +56,19 @@
     <section class="page active" id="page-overview">
       <h2>概览</h2>
 
-      <div class="card">
-        <div class="card-head">
-          <h3>运行状态</h3>
-          <div class="spacer"></div>
-          <button class="small" id="btnDeploy">部署配置</button>
+      <div class="card hero">
+        <div class="hero-main">
+          <div class="hero-status">
+            <span class="dot" id="heroDot"></span>
+            <span id="statKernel">—</span>
+          </div>
+          <div class="hero-meta" id="overviewNote"></div>
+        </div>
+        <div class="hero-actions">
+          <button class="primary" id="btnDeploy">部署配置</button>
           <button class="small" id="btnRestart">重启内核</button>
           <button class="small" id="btnStop">停止内核</button>
         </div>
-        <div class="grid">
-          <div class="stat"><div class="k">内核</div><div class="v" id="statKernel">—</div></div>
-          <div class="stat"><div class="k">内核版本</div><div class="v" id="statVersion" style="font-size:14px">—</div></div>
-          <div class="stat"><div class="k">节点</div><div class="v" id="statNodes">—</div></div>
-          <div class="stat"><div class="k">已启用策略</div><div class="v" id="statPolicies">—</div></div>
-        </div>
-        <p class="note" id="overviewNote" style="margin-top:12px"></p>
         <p class="warn-text hidden" id="overviewHint"></p>
       </div>
 
@@ -78,23 +76,33 @@
         <div class="card-head">
           <h3>实时流量</h3>
           <div class="spacer"></div>
+          <span class="note" id="trafficLegend"><span class="lg up"></span>上传 <span class="lg down"></span>下载</span>
           <button class="small" id="btnTrafficReset">清零</button>
         </div>
-        <div class="grid">
-          <div class="stat"><div class="k">↑ 上传</div><div class="v" id="statUp" style="font-size:16px">—</div></div>
-          <div class="stat"><div class="k">↓ 下载</div><div class="v" id="statDown" style="font-size:16px">—</div></div>
-          <div class="stat"><div class="k">累计上传</div><div class="v" id="statTotalUp" style="font-size:14px">—</div></div>
-          <div class="stat"><div class="k">累计下载</div><div class="v" id="statTotalDown" style="font-size:14px">—</div></div>
+        <canvas id="trafficChart" height="120"></canvas>
+        <div class="grid" style="margin-top:12px">
+          <div class="stat"><div class="k">↑ 上传</div><div class="v" id="statUp">—</div></div>
+          <div class="stat"><div class="k">↓ 下载</div><div class="v" id="statDown">—</div></div>
+          <div class="stat"><div class="k">累计上传</div><div class="v" id="statTotalUp">—</div></div>
+          <div class="stat"><div class="k">累计下载</div><div class="v" id="statTotalDown">—</div></div>
         </div>
       </div>
 
-      <div class="card">
-        <div class="card-head">
-          <h3>节点组</h3>
-          <div class="spacer"></div>
-          <button class="small" id="btnOverviewNodes">刷新</button>
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head"><h3>内核</h3></div>
+          <div class="stat-row"><span>版本</span><strong id="statVersion">—</strong></div>
+          <div class="stat-row"><span>节点</span><strong id="statNodes">—</strong></div>
+          <div class="stat-row"><span>已启用策略</span><strong id="statPolicies">—</strong></div>
         </div>
-        <div id="overviewGroups"></div>
+        <div class="card">
+          <div class="card-head">
+            <h3>节点组</h3>
+            <div class="spacer"></div>
+            <button class="small" id="btnOverviewNodes">刷新</button>
+          </div>
+          <div id="overviewGroups"></div>
+        </div>
       </div>
     </section>
 
