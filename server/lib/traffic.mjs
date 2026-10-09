@@ -1,10 +1,18 @@
 /**
  * 流量统计：保持一条到 sing-box Clash API /traffic 的 WebSocket，
  * 缓存最新上下行速率，面板轮询 /api/traffic 拿数据。
+ * ws 缺失时静默降级，不影响面板启动。
  */
-import WebSocket from 'ws';
 import { KERNEL } from './paths.mjs';
 import { loadSettings } from './settings.mjs';
+
+let WebSocket = null;
+try {
+  const m = await import('ws');
+  WebSocket = m.default || m.WebSocket;
+} catch {
+  // ws 没装，流量统计不可用，面板照常跑
+}
 
 let ws = null;
 let last = { up: 0, down: 0, at: 0 };
@@ -14,7 +22,7 @@ let lastSampleAt = 0;
 let reconnectTimer = null;
 
 function connect() {
-  if (ws) return;
+  if (ws || !WebSocket) return;
   try {
     const secret = loadSettings().kernel?.clashSecret;
     const url = `ws://${KERNEL.clashApiHost}:${KERNEL.clashApiPort}/traffic`;
