@@ -50,7 +50,23 @@ ERROR router: reload rule-set flip: invalid character 'T' looking for beginning 
 ```
 
 （第二行是故意写入非法内容触发的，正好证明内核确实重新读取了文件。）
-写入合法内容时无报错，即重载成功。
+写入合法内容时无报错，即重载成功。成功时内核不打日志，所以看不到「已重载」——
+这是 sing-box 的设计，不是没生效。
+
+在 iStoreOS 上也验证过整条链路：面板点开关 → 开关文件内容变成
+`{"version":3,"rules":[{"domain":["obflip-off.invalid"]}]}` → 内核 PID 前后都是同一个。
+
+## 自检
+
+```sh
+BOXPILOT_ROOT=./runtime node tools/selftest.mjs --smoke
+```
+
+不带 `--smoke` 只生成配置；带上会**真的把内核拉起来 6 秒**，看它会不会 FATAL。
+
+这一步不是多余的：`sing-box check` 只解析配置，抓不到只在启动阶段才暴露的问题。
+开发过程中「空的 direct 出站」和「DNS 规则里用了 IP 型规则集」两个 FATAL
+都是靠它抓出来的，`check` 当时是全部通过的。
 
 ## 架构
 
@@ -124,6 +140,25 @@ MyBox 用 sing-box 原生的 `route_exclude_address_set` 实现：
 
 结果是内核**不给这些地址建路由**，包根本进不了 tun——不是「进了内核再判定直连」，
 而是压根不进来。省掉的是内核的转发、嗅探和匹配开销。
+
+在 iStoreOS（x86_64，sing-box 1.14.2）上实测：tun 的路由表里只有 74 条
+（被代理的目标），**私网段 0 条**，`114.114.114.0/24`、`223.5.5.0/24` 这类
+国内地址都不在表里。同时 DNS 侧也分开了——`www.google.com` 解析到
+`198.19.0.2`（FakeIP，会进内核），`www.baidu.com` 解析到 `183.2.172.177`
+（真实国内 IP，不进内核）。
+
+### 一个必须绕开的坑：兜底出站不能是空的 direct
+
+`route.final` 不能直接指向一个只有 `{"type":"direct"}` 的出站。sing-box 的
+detour 校验里有这么一条（`common/dialer/detour.go`）：
+
+```
+detour to an empty direct outbound makes no sense
+```
+
+DNS 服务器不写 `detour` 时会去取默认出站，于是整份配置直接 FATAL 起不来。
+所以 MyBox 固定生成一个叫「兜底」的 selector，成员是 `[直连, 拒绝, …各分组]`、
+默认走直连，`route.final` 指向它——行为等价于 final=直连，但能通过校验。
 
 ## 支持的协议
 

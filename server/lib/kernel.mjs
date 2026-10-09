@@ -21,6 +21,19 @@ export function currentVersion() {
   return readJson(VERSION_FILE, null)?.version ?? null;
 }
 
+/**
+ * 内核版本。
+ * VERSION.json 只有通过面板安装内核时才会写；安装脚本直接下的内核没有这个文件，
+ * 所以拿不到就现场问内核自己。
+ */
+export async function installedVersion() {
+  const fromFile = currentVersion();
+  if (fromFile) return fromFile;
+  const out = await versionOutput();
+  const m = out?.match(/sing-box version (\S+)/);
+  return m ? m[1] : null;
+}
+
 export function installed() {
   return fs.existsSync(SINGBOX_BIN);
 }
@@ -170,7 +183,7 @@ export async function status() {
     return {
       running,
       pid: null,
-      version: currentVersion(),
+      version: await installedVersion(),
       installed: installed(),
       supervisor: plat.supervisor,
       platform: plat.id,
@@ -181,7 +194,7 @@ export async function status() {
   return {
     running,
     pid: running ? pid : null,
-    version: currentVersion(),
+    version: await installedVersion(),
     installed: installed(),
     supervisor: 'direct',
     platform: plat.id,
