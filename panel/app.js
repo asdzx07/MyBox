@@ -458,7 +458,7 @@ async function loadOverviewGroups() {
   }
 }
 
-/* --------------------------------------------------------------- 活动连接 */
+/* --------------------------------------------------------------- 当前连接 */
 
 async function loadConnectionsPage() {
   const countEl = $('connPageCount');
@@ -466,27 +466,66 @@ async function loadConnectionsPage() {
   try {
     const data = await api('/connections');
     const conns = data.connections || [];
-    countEl.textContent = `${conns.length} 条连接`;
+    countEl.textContent = `${conns.length} 条连接 · 累计 ↓ ${fmtBytes(data.downloadTotal || 0)} / ↑ ${fmtBytes(data.uploadTotal || 0)}`;
     $('sbConnCount').textContent = conns.length;
     $('sbConnCount').classList.toggle('hidden', conns.length === 0);
 
     if (!conns.length) {
-      listEl.innerHTML = '<p class="note">当前没有活动连接</p>';
+      listEl.innerHTML = '<p class="note" style="padding:16px 0;text-align:center">当前没有活动连接</p>';
       return;
     }
-    listEl.innerHTML = `<div class="list">${conns.map((c) => `
-      <div class="item">
-        <div class="grow">
-          <div class="title">${escapeHtml(c.metadata?.host || c.metadata?.destinationIP || '—')}</div>
-          <div class="sub">${escapeHtml(c.metadata?.network || '')} · 源: ${escapeHtml(c.metadata?.sourceIP || '')} · 链: ${(c.chains || []).join(' → ')}</div>
+    listEl.innerHTML = `<div class="list">${conns.map((c) => {
+      const host = escapeHtml(c.metadata?.host || c.metadata?.destinationIP || '—');
+      const port = c.metadata?.destinationPort ? `:${c.metadata.destinationPort}` : '';
+      const src = escapeHtml(c.metadata?.sourceIP || '');
+      const proto = escapeHtml((c.metadata?.network || '').toUpperCase());
+      const chain = (c.chains || []).map(escapeHtml).join(' → ');
+      const rule = escapeHtml(c.rule || '');
+      const id = encodeURIComponent(c.id || '');
+      return `
+        <div class="conn-item">
+          <div style="flex:1;min-width:0">
+            <div class="conn-meta-title">
+              <span>${host}${port}</span>
+              <span class="tag muted" style="font-size:11px">${proto}</span>
+              ${rule ? `<span class="tag" style="font-size:11px">${rule}</span>` : ''}
+            </div>
+            <div class="conn-meta-sub">
+              源: ${src} · 链路: ${chain || '直连'}
+            </div>
+          </div>
+          <div class="inline" style="gap:8px;align-items:center">
+            <span class="tag muted" style="font-family:monospace;font-size:11px">↓ ${fmtBytes(c.download || 0)} / ↑ ${fmtBytes(c.upload || 0)}</span>
+            ${c.id ? `<button class="small" onclick="closeSingleConn('${id}')" style="padding:3px 8px;font-size:11.5px">断开</button>` : ''}
+          </div>
         </div>
-        <span class="tag muted">↓ ${fmtBytes(c.download || 0)} / ↑ ${fmtBytes(c.upload || 0)}</span>
-      </div>
-    `).join('')}</div>`;
+      `;
+    }).join('')}</div>`;
   } catch (err) {
-    listEl.innerHTML = `<p class="err-text">${escapeHtml(err.message)}</p>`;
+    listEl.innerHTML = `<p class="err-text" style="padding:16px 0">${escapeHtml(err.message)}</p>`;
   }
 }
+
+window.closeSingleConn = async function(id) {
+  try {
+    await api(`/connections/${id}`, { method: 'DELETE' });
+    toast('已断开该连接');
+    await loadConnectionsPage();
+  } catch (err) {
+    toast(`断开失败：${err.message}`);
+  }
+};
+
+window.closeAllConnections = async function() {
+  if (!confirm('确定断开所有当前活动连接吗？（客户端会自动重连）')) return;
+  try {
+    await api('/connections', { method: 'DELETE' });
+    toast('已断开所有连接');
+    await loadConnectionsPage();
+  } catch (err) {
+    toast(`断开失败：${err.message}`);
+  }
+};
 
 /* --------------------------------------------------------------- 内网分流 (NEW) */
 
@@ -772,31 +811,65 @@ async function loadSettings() {
   try {
     const s = await api('/settings');
     state.settings = s;
-    $('setIpv6').checked = Boolean(s.network?.ipv6);
-    $('setRejectQuic').checked = Boolean(s.network?.rejectQuic);
-    $('setAutoRedirect').checked = s.network?.tun?.autoRedirect !== false;
-    $('setDirectBypass').checked = s.network?.directBypass !== false;
-    $('setDirectForNodes').checked = s.network?.directForNodes !== false;
-    $('setDnsMode').value = s.dns?.mode || 'dnsmasq';
-    $('setDnsDirect').value = s.dns?.direct === 'wan' ? '' : (s.dns?.directAddress || '');
-    $('setDnsProxy').value = s.dns?.proxy || '';
-    $('setFakeIp').checked = Boolean(s.dns?.fakeIp);
-    $('setAdblock').checked = Boolean(s.dns?.adblock);
-    $('setAdblockAllow').value = (s.dns?.adblockAllow || []).join('\n');
-    $('setAdblockCustom').value = (s.dns?.adblockCustom || []).join('\n');
-    $('setKernelVersion').value = s.kernel?.installed
-      ? (s.kernel.version ? `已安装 ${s.kernel.version}` : '已安装（版本未知）')
-      : '（未安装）';
-    $('setLogLevel').value = s.kernel?.logLevel || 'warn';
+    if ($('setIpv6')) $('setIpv6').checked = Boolean(s.network?.ipv6);
+    if ($('setRejectQuic')) $('setRejectQuic').checked = Boolean(s.network?.rejectQuic);
+    if ($('setAutoRedirect')) $('setAutoRedirect').checked = s.network?.tun?.autoRedirect !== false;
+    if ($('setDirectBypass')) $('setDirectBypass').checked = s.network?.directBypass !== false;
+    if ($('setDirectForNodes')) $('setDirectForNodes').checked = s.network?.directForNodes !== false;
+    if ($('setDnsMode')) $('setDnsMode').value = s.dns?.mode || 'dnsmasq';
+    if ($('setDnsDirect')) $('setDnsDirect').value = s.dns?.direct === 'wan' ? '' : (s.dns?.directAddress || '');
+    if ($('setDnsProxy')) $('setDnsProxy').value = s.dns?.proxy || '';
+    if ($('setFakeIp')) $('setFakeIp').checked = Boolean(s.dns?.fakeIp);
+    if ($('setAdblock')) $('setAdblock').checked = Boolean(s.dns?.adblock);
+    if ($('setAdblockAllow')) $('setAdblockAllow').value = (s.dns?.adblockAllow || []).join('\n');
+    if ($('setAdblockCustom')) $('setAdblockCustom').value = (s.dns?.adblockCustom || []).join('\n');
+    if ($('setLogLevel')) $('setLogLevel').value = s.kernel?.logLevel || 'warn';
+
+    // 内核版本卡片
+    const kVer = s.kernel?.installed
+      ? (s.kernel.version ? (s.kernel.version.startsWith('v') ? s.kernel.version : `v${s.kernel.version}`) : 'v1.14.2')
+      : '未安装';
+    if ($('setKernelVersion')) $('setKernelVersion').textContent = kVer;
   } catch {}
 
-  // 面板版本
-  api('/system/version').then((v) => {
-    $('sysVersion').textContent = v.current || 'v0.2.0';
-    $('brandVersion').textContent = v.current ? ` ${v.current}` : '';
-  }).catch(() => {
-    $('sysVersion').textContent = 'v0.2.0';
-  });
+  // 面板语义化版本展示与官方源对比
+  try {
+    const v = await api('/system/version');
+    const cur = v.current || 'v1.0.0';
+    if ($('sysVersion')) $('sysVersion').textContent = cur;
+    if ($('settingCurrentVerTag')) $('settingCurrentVerTag').textContent = cur;
+    if ($('brandVersion')) $('brandVersion').textContent = ` ${cur}`;
+    if ($('sysCommitSha')) $('sysCommitSha').textContent = v.commitSha ? `(${v.commitSha})` : '';
+    if ($('latestSysVersion')) $('latestSysVersion').textContent = v.latest || cur;
+    if ($('panelCheckTime')) $('panelCheckTime').textContent = '刚刚检查';
+
+    const pBadge = $('panelUpdateBadge');
+    const applyBtn = $('btnSysUpdate');
+    if (v.hasUpdate) {
+      if (pBadge) {
+        pBadge.textContent = `发现新版本 ${v.latest}`;
+        pBadge.style.color = 'var(--warn)';
+      }
+      if (applyBtn) {
+        applyBtn.classList.remove('hidden');
+        if ($('sysUpdateBtnText')) $('sysUpdateBtnText').textContent = `升级至 ${v.latest}`;
+      }
+    } else {
+      if (pBadge) {
+        pBadge.textContent = '当前已是最新';
+        pBadge.style.color = '';
+      }
+      if (applyBtn) applyBtn.classList.add('hidden');
+    }
+  } catch {
+    if ($('sysVersion')) $('sysVersion').textContent = 'v1.0.0';
+  }
+
+  // 获取并展示内核最新版本
+  try {
+    const kLatest = await api('/kernel/latest');
+    if ($('latestKernelVer')) $('latestKernelVer').textContent = kLatest.version || 'v1.14.2';
+  } catch {}
 }
 
 async function loadKernelLog() {
@@ -1077,69 +1150,170 @@ function bindEvents() {
     }
   });
 
-  // 设置页
-  $('btnSaveSettings').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
-    const patch = {
-      network: {
-        ipv6: $('setIpv6').checked,
-        rejectQuic: $('setRejectQuic').checked,
-        directBypass: $('setDirectBypass').checked,
-        directForNodes: $('setDirectForNodes').checked,
-        tun: { autoRedirect: $('setAutoRedirect').checked },
-      },
-      dns: {
-        mode: $('setDnsMode').value,
-        direct: $('setDnsDirect').value.trim() ? 'custom' : 'wan',
-        directAddress: $('setDnsDirect').value.trim(),
-        proxy: $('setDnsProxy').value.trim() || '1.1.1.1',
-        fakeIp: $('setFakeIp').checked,
-        adblock: $('setAdblock').checked,
-        adblockAllow: $('setAdblockAllow').value.split('\n').map((s) => s.trim()).filter(Boolean),
-        adblockCustom: $('setAdblockCustom').value.split('\n').map((s) => s.trim()).filter(Boolean),
-      },
-      kernel: { logLevel: $('setLogLevel').value },
-    };
-    await api('/settings', { method: 'PUT', body: patch });
-    await api('/deploy', { method: 'POST', body: { restart: true } });
-    toast('设置已保存并自动完成部署');
-    await loadAll();
-  }));
-
-  $('btnLog').addEventListener('click', loadKernelLog);
-  $('logAuto').addEventListener('change', scheduleLogAuto);
-  $('logSearch').addEventListener('input', filterKernelLog);
-
-  $('btnCheckUpdate').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
-    const latest = await api('/kernel/latest');
-    $('kernelUpdateNote').textContent = `官方最新 ${latest.version}（${new Date(latest.publishedAt).toLocaleDateString()}）`;
-  }));
-
-  $('btnInstallKernel').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
-    const latest = await api('/kernel/latest');
-    if (!confirm(`下载并安装官方 sing-box ${latest.version}？（安装后自动重启内核）`)) return;
-    $('kernelUpdateNote').textContent = '正在下载官方二进制…';
+  // 设置页右上角核心操作 1: 保存并部署 (带完整成功变绿动效)
+  $('btnSaveSettings')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const txt = $('saveSettingsBtnText');
+    const prevText = txt ? txt.textContent : '保存并部署';
+    btn.disabled = true;
+    if (txt) txt.innerHTML = '<span class="animate-spin">↻</span> 正在部署...';
     try {
+      const patch = {
+        network: {
+          ipv6: $('setIpv6').checked,
+          rejectQuic: $('setRejectQuic').checked,
+          directBypass: $('setDirectBypass').checked,
+          directForNodes: $('setDirectForNodes').checked,
+          tun: { autoRedirect: $('setAutoRedirect').checked },
+        },
+        dns: {
+          mode: $('setDnsMode').value,
+          direct: $('setDnsDirect').value.trim() ? 'custom' : 'wan',
+          directAddress: $('setDnsDirect').value.trim(),
+          proxy: $('setDnsProxy').value.trim() || '1.1.1.1',
+          fakeIp: $('setFakeIp').checked,
+          adblock: $('setAdblock').checked,
+          adblockAllow: $('setAdblockAllow').value.split('\n').map((s) => s.trim()).filter(Boolean),
+          adblockCustom: $('setAdblockCustom').value.split('\n').map((s) => s.trim()).filter(Boolean),
+        },
+        kernel: { logLevel: $('setLogLevel') ? $('setLogLevel').value : 'warn' },
+      };
+      await api('/settings', { method: 'PUT', body: patch });
+      await api('/deploy', { method: 'POST', body: { restart: true } });
+
+      // 成功变绿并显示对勾动效
+      btn.classList.add('btn-success');
+      if (txt) txt.textContent = '✓ 保存部署成功';
+      toast('✓ 配置已保存，0断流热重载生效！');
+
+      setTimeout(() => {
+        btn.classList.remove('btn-success');
+        if (txt) txt.textContent = '保存并部署';
+        btn.disabled = false;
+      }, 2500);
+
+      await loadOverview();
+    } catch (err) {
+      btn.disabled = false;
+      if (txt) txt.textContent = prevText;
+      toast(`保存失败：${err.message}`);
+    }
+  });
+
+  // 设置页右上角核心操作 2: 检查更新
+  $('btnCheckSysUpdate')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const txt = $('checkUpdateBtnText');
+    btn.disabled = true;
+    if (txt) txt.innerHTML = '<span class="animate-spin">↻</span> 检查中...';
+    try {
+      const v = await api('/system/version');
+      if ($('sysVersion')) $('sysVersion').textContent = v.current || 'v1.0.0';
+      if ($('latestSysVersion')) $('latestSysVersion').textContent = v.latest || v.current || 'v1.0.0';
+      if ($('panelCheckTime')) $('panelCheckTime').textContent = '刚刚检查';
+
+      const pBadge = $('panelUpdateBadge');
+      const applyBtn = $('btnSysUpdate');
+      if (v.hasUpdate) {
+        if (pBadge) {
+          pBadge.textContent = `发现新版本 ${v.latest}`;
+          pBadge.style.color = 'var(--warn)';
+        }
+        if (applyBtn) {
+          applyBtn.classList.remove('hidden');
+          if ($('sysUpdateBtnText')) $('sysUpdateBtnText').textContent = `升级至 ${v.latest}`;
+        }
+        if (txt) txt.textContent = '有新版本';
+        toast(`发现新版本 ${v.latest} 可更新！`);
+      } else {
+        if (pBadge) {
+          pBadge.textContent = '当前已是最新';
+          pBadge.style.color = '';
+        }
+        if (applyBtn) applyBtn.classList.add('hidden');
+        if (txt) txt.textContent = '已是最新';
+        toast('当前版本已是最新');
+      }
+    } catch (err) {
+      toast(`检查失败：${err.message}`);
+      if (txt) txt.textContent = '检查更新';
+    } finally {
+      setTimeout(() => {
+        btn.disabled = false;
+        if (txt) txt.textContent = '检查更新';
+      }, 2200);
+    }
+  });
+
+  // 立即升级面板
+  $('btnSysUpdate')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const txt = $('sysUpdateBtnText');
+    if (!confirm('确认拉取线上最新版本并重启控制面板？')) return;
+    btn.disabled = true;
+    if (txt) txt.innerHTML = '<span class="animate-spin">↻</span> 正在更新...';
+    try {
+      await api('/system/update', { method: 'POST' });
+      toast('更新已在后台开始，面板服务即将重启...');
+      if (txt) txt.textContent = '✓ 更新指令已下发';
+      setTimeout(() => location.reload(), 3000);
+    } catch (err) {
+      btn.disabled = false;
+      if (txt) txt.textContent = '立即更新';
+      toast(`更新失败：${err.message}`);
+    }
+  });
+
+  // 设置页右上角核心操作 3: 内核更新 (带完整成功变绿动效)
+  $('btnInstallKernel')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const txt = $('kernelBtnText');
+    btn.disabled = true;
+    if (txt) txt.innerHTML = '<span class="animate-spin">↻</span> 查询最新...';
+    try {
+      const latest = await api('/kernel/latest');
+      if ($('latestKernelVer')) $('latestKernelVer').textContent = latest.version;
+      const cur = state.settings?.kernel?.version || '';
+      if (cur && (cur === latest.version || `v${cur}` === latest.version)) {
+        toast(`当前内核已是最新 (${latest.version})`);
+        if (txt) txt.textContent = '内核已是最新';
+        setTimeout(() => {
+          btn.disabled = false;
+          if (txt) txt.textContent = '内核更新';
+        }, 2000);
+        return;
+      }
+      if (!confirm(`下载并安装官方 sing-box ${latest.version}？（安装后自动重启内核）`)) {
+        btn.disabled = false;
+        if (txt) txt.textContent = '内核更新';
+        return;
+      }
+      if (txt) txt.innerHTML = '<span class="animate-spin">↻</span> 正在下载内核...';
       const info = await api('/kernel/install', { method: 'POST', body: { version: latest.version } });
-      $('kernelUpdateNote').textContent = `已安装 ${info.version}${info.restarted ? '，内核已重启' : ''}`;
-      toast(`内核已更新到 ${info.version}`);
+      btn.classList.add('btn-success');
+      if (txt) txt.textContent = '✓ 内核更新成功';
+      toast(`✓ 官方 sing-box ${info.version} 安装完成${info.restarted ? '，内核已热重启！' : ''}`);
+      if ($('setKernelVersion')) $('setKernelVersion').textContent = info.version;
+      setTimeout(() => {
+        btn.classList.remove('btn-success');
+        if (txt) txt.textContent = '内核更新';
+        btn.disabled = false;
+      }, 3000);
       await Promise.all([loadSettings(), loadOverview()]);
     } catch (err) {
-      $('kernelUpdateNote').textContent = `安装失败：${err.message}`;
-      toast('内核安装失败');
+      btn.disabled = false;
+      if (txt) txt.textContent = '内核更新';
+      toast(`内核更新失败：${err.message}`);
     }
-  }));
+  });
 
-  $('btnCheckSysUpdate').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
-    const v = await api('/system/version');
-    $('sysVersion').textContent = v.current || 'v0.2.0';
-    if (v.hasUpdate) {
-      $('sysUpdateHint').textContent = `有新版本 ${v.latest} 可更新`;
-      $('btnSysUpdate').style.display = '';
-    } else {
-      $('sysUpdateHint').textContent = '已是最新版本';
-      $('btnSysUpdate').style.display = 'none';
-    }
-  }));
+  // 当前连接页：断开全部连接
+  $('btnCloseAllConns')?.addEventListener('click', window.closeAllConnections);
+
+  // 日志相关
+  $('btnLog')?.addEventListener('click', loadKernelLog);
+  $('logAuto')?.addEventListener('change', scheduleLogAuto);
+  $('logSearch')?.addEventListener('input', filterKernelLog);
 }
 
 /* --------------------------------------------------------------- 启动 */

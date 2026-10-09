@@ -49,10 +49,10 @@
         目标分流
       </button>
 
-      <!-- 4. 活动连接 -->
+      <!-- 4. 当前连接 -->
       <button data-tab="connections">
         <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>
-        活动连接<span class="bdg hidden" id="sbConnCount">0</span>
+        当前连接<span class="bdg hidden" id="sbConnCount">0</span>
       </button>
 
       <!-- 5. 内网分流 -->
@@ -211,15 +211,30 @@
       </div>
     </section>
 
-    <!-- ---------------------------------------------------------- 4. 活动连接 -->
+    <!-- ---------------------------------------------------------- 4. 当前连接 -->
     <section class="page" id="page-connections">
-      <h2>活动连接</h2>
+      <div class="page-head-with-actions">
+        <div>
+          <h2>当前连接</h2>
+          <p class="note" style="margin-top:2px">展示由 sing-box 透明代理接管的实时活动连接与流量传输</p>
+        </div>
+        <div class="head-actions">
+          <button class="small danger" id="btnCloseAllConns">
+            <svg class="btn-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            断开全部
+          </button>
+          <button class="small" id="btnConnsRefresh">
+            <svg class="btn-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            刷新
+          </button>
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-head">
-          <h3>实时连接列表</h3>
+          <h3>实时连接明细</h3>
           <div class="spacer"></div>
           <span class="note" id="connPageCount"></span>
-          <button class="small" id="btnConnsRefresh">刷新</button>
         </div>
         <div id="connsList"></div>
       </div>
@@ -273,8 +288,83 @@
 
     <!-- ---------------------------------------------------------- 7. 核心设置 -->
     <section class="page" id="page-settings">
-      <h2>核心设置</h2>
+      <div class="page-head-with-actions">
+        <div>
+          <div class="page-title-row">
+            <h2>核心设置</h2>
+            <span class="version-tag" id="settingCurrentVerTag">v1.0.0</span>
+          </div>
+          <p class="note" style="margin-top:2px">网络栈协议、DNS 策略、内核系统及版本更新管理</p>
+        </div>
+        <div class="head-actions">
+          <!-- 按钮 1: 检查更新 / 立即更新 -->
+          <button class="small" id="btnCheckSysUpdate">
+            <svg class="btn-ic text-blue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            <span id="checkUpdateBtnText">检查更新</span>
+          </button>
+          <button class="small btn-success hidden" id="btnSysUpdate">
+            <svg class="btn-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+            <span id="sysUpdateBtnText">立即更新</span>
+          </button>
 
+          <!-- 按钮 2: 内核更新 -->
+          <button class="small" id="btnInstallKernel">
+            <svg class="btn-ic text-purple" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/></svg>
+            <span id="kernelBtnText">内核更新</span>
+          </button>
+
+          <!-- 按钮 3: 保存并部署 -->
+          <button class="primary" id="btnSaveSettings" style="min-width:116px">
+            <svg class="btn-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>
+            <span id="saveSettingsBtnText">保存并部署</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 核心卡片 1: 版本状态展板 (语义化版本号 + sing-box 官方内核版本) -->
+      <div class="card">
+        <div class="card-head">
+          <h3>版本信息与在线状态</h3>
+          <div class="spacer"></div>
+          <span class="bdg" id="versionStatusBadge">已连接官方源</span>
+        </div>
+        <p class="note" style="margin:-4px 0 10px">采用标准语义化版本号 (SemVer) 与 GitHub 官方源自动对齐</p>
+        <div class="version-cards-grid">
+          <!-- 面板版本卡 -->
+          <div class="version-mini-card">
+            <div class="vmc-top">
+              <span>MyBox 控制面板</span>
+              <span class="bdg" id="panelUpdateBadge">当前已是最新</span>
+            </div>
+            <div class="vmc-val">
+              <span id="sysVersion">v1.0.0</span>
+              <small id="sysCommitSha"></small>
+            </div>
+            <div class="vmc-foot">
+              <span>线上最新版本：<strong id="latestSysVersion">v1.0.0</strong></span>
+              <span id="panelCheckTime">刚刚检查</span>
+            </div>
+          </div>
+
+          <!-- 内核版本卡 -->
+          <div class="version-mini-card">
+            <div class="vmc-top">
+              <span>sing-box 官方内核</span>
+              <span class="bdg" id="kernelStatusBadge">SagerNet 原版</span>
+            </div>
+            <div class="vmc-val">
+              <span id="setKernelVersion">v1.14.2</span>
+              <small style="color:var(--ok)">● 运行中</small>
+            </div>
+            <div class="vmc-foot">
+              <span>官方最新 Release：<strong id="latestKernelVer">v1.14.2</strong></span>
+              <span class="note" id="kernelUpdateNote"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 核心卡片 2: 网络与 TUN 栈设置 -->
       <div class="card">
         <div class="card-head">
           <h3>网络与 TUN 栈设置</h3>
@@ -336,12 +426,13 @@
           </div>
         </div>
         <p class="note" style="margin-top:12px">
-          TUN 协议栈由 sing-box 原生自动管理，无需手动维护路由表。改动后请点击页面底部「保存并部署」。
+          TUN 协议栈由 sing-box 原生自动管理，无需手动维护路由表。改动后请点击右上角「保存并部署」。
         </p>
       </div>
 
+      <!-- 核心卡片 3: DNS 分流与日志级别 -->
       <div class="card">
-        <h3>DNS 分流</h3>
+        <h3>DNS 分流与运行级别</h3>
         <div class="row">
           <label class="field"><span>接管方式</span>
             <select id="setDnsMode">
@@ -351,6 +442,9 @@
           </label>
           <label class="field"><span>直连 DNS</span><input id="setDnsDirect" placeholder="223.5.5.5"></label>
           <label class="field"><span>代理 DNS</span><input id="setDnsProxy" placeholder="1.1.1.1"></label>
+          <label class="field"><span>内核日志级别</span>
+            <select id="setLogLevel"><option>trace</option><option>debug</option><option>info</option><option>warn</option><option>error</option></select>
+          </label>
         </div>
         <div class="inline" style="gap:16px;margin:8px 0">
           <label class="inline"><input type="checkbox" id="setFakeIp" style="width:auto"> 代理域名使用 FakeIP</label>
@@ -366,22 +460,7 @@
         </div>
       </div>
 
-      <div class="card">
-        <h3>内核版本与更新</h3>
-        <div class="row">
-          <label class="field"><span>当前版本</span><input id="setKernelVersion" readonly></label>
-          <label class="field"><span>日志级别</span>
-            <select id="setLogLevel"><option>trace</option><option>debug</option><option>info</option><option>warn</option><option>error</option></select>
-          </label>
-        </div>
-        <div class="inline" style="flex-wrap:wrap">
-          <button id="btnCheckUpdate">检查最新版本</button>
-          <button id="btnInstallKernel">安装/更新官方内核</button>
-          <span class="note" id="kernelUpdateNote"></span>
-        </div>
-        <p class="note" style="margin-top:10px">内核始终来自官方 SagerNet/sing-box Release，本项目不做任何修改。</p>
-      </div>
-
+      <!-- 核心卡片 4: 内核运行日志 -->
       <div class="card">
         <div class="card-head">
           <h3>内核运行日志</h3>
@@ -391,28 +470,6 @@
           <button class="small" id="btnLog">刷新</button>
         </div>
         <pre class="log" id="kernelLog">—</pre>
-      </div>
-
-      <div class="card">
-        <div class="card-head">
-          <h3>面板版本</h3>
-          <div class="spacer"></div>
-          <button class="small" id="btnCheckSysUpdate">检查更新</button>
-          <button class="small primary" id="btnSysUpdate" style="display:none">立即更新</button>
-        </div>
-        <div class="stat-row">
-          <span>当前代码版本</span>
-          <strong id="sysVersion">—</strong>
-        </div>
-        <div class="stat-row">
-          <span>更新状态</span>
-          <span class="note" id="sysUpdateHint">点击右上角「检查更新」</span>
-        </div>
-        <p class="note" style="margin-top:10px">更新会替换 server/panel/system 代码，保留 data/（订阅、设置不变），然后重启面板和内核。</p>
-      </div>
-
-      <div class="card">
-        <button class="primary" id="btnSaveSettings">保存并部署</button>
       </div>
     </section>
   </main>

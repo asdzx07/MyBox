@@ -459,22 +459,72 @@ app.get('/api/system/version', async (req, res) => {
     const fs = await import('node:fs');
     const { ROOT } = await import('./lib/paths.mjs');
     const path = await import('node:path');
-    let current = 'unknown';
+    let currentRaw = '1.0.0';
     try {
-      current = fs.readFileSync(path.join(ROOT, 'VERSION'), 'utf8').trim() || 'unknown';
-    } catch {}
-    // 查 GitHub 最新 commit
+      const v = fs.readFileSync(path.join(ROOT, 'VERSION'), 'utf8').trim();
+      if (v) currentRaw = v;
+    } catch {
+      try {
+        const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+        if (pkg.version) currentRaw = pkg.version;
+      } catch {}
+    }
+    const current = currentRaw.startsWith('v') ? currentRaw : `v${currentRaw}`;
+
+    // 查 GitHub 线上版本
     let latest = null;
+    let changelog = null;
     try {
-      const r = await fetch('https://api.github.com/repos/asdzx07/MyBox/commits/main', {
+      // 1. 优先查 Releases 最新 Release
+      const rRel = await fetch('https://api.github.com/repos/asdzx07/MyBox/releases/latest', {
         headers: { 'User-Agent': 'mybox' },
+        signal: AbortSignal.timeout(4000),
       });
-      if (r.ok) {
-        const j = await r.json();
-        latest = j.sha?.slice(0, 7) || null;
+      if (rRel.ok) {
+        const j = await rRel.json();
+        if (j.tag_name) {
+          latest = j.tag_name.startsWith('v') ? j.tag_name : `v${j.tag_name}`;
+          changelog = j.body || null;
+        }
       }
     } catch {}
-    res.json({ ok: true, current, latest, hasUpdate: latest && current !== 'unknown' && latest !== current });
+
+    // 2. 若无 release，拉取 GitHub main 分支的 VERSION 文件
+    if (!latest) {
+      try {
+        const rVer = await fetch('https://raw.githubusercontent.com/asdzx07/MyBox/main/VERSION', {
+          headers: { 'User-Agent': 'mybox' },
+          signal: AbortSignal.timeout(4000),
+        });
+        if (rVer.ok) {
+          const t = (await rVer.text()).trim();
+          if (t && /^v?\d+\.\d+/.test(t)) {
+            latest = t.startsWith('v') ? t : `v${t}`;
+          }
+        }
+      } catch {}
+    }
+
+    // 3. 兜底查最新 Commit SHA
+    let commitSha = null;
+    try {
+      const rCommit = await fetch('https://api.github.com/repos/asdzx07/MyBox/commits/main', {
+        headers: { 'User-Agent': 'mybox' },
+        signal: AbortSignal.timeout(4000),
+      });
+      if (rCommit.ok) {
+        const j = await rCommit.json();
+        commitSha = j.sha?.slice(0, 7) || null;
+      }
+    } catch {}
+
+    if (!latest) {
+      latest = current;
+    }
+
+    // 判断更新标志：若有更高版本号，或者显式不同
+    const hasUpdate = Boolean(latest && latest !== current && latest !== 'v1.0.0');
+    res.json({ ok: true, current, latest, commitSha, hasUpdate, changelog });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -646,6 +696,40 @@ app.post('/api/nodes/latency/batch', async (req, res) => {
     }
   }
   res.json({ results });
+});
+
+/** 当前连接列表（与 sing-box clashApi 统一，提供完整活动连接） */
+app.get('/api/connections', async (req, res) => {
+  try {
+    const data = await clashApi('/connections');
+    res.json({
+      ok: true,
+      connections: data?.connections ?? [],
+      uploadTotal: data?.uploadTotal ?? 0,
+      downloadTotal: data?.downloadTotal ?? 0,
+      memory: data?.memory ?? 0,
+    });
+  } catch (err) {
+    // 内核未启动或暂时不可达时优雅降级返回空连接列表，避免前端报 404/500
+    res.json({
+      ok: false,
+      connections: [],
+      uploadTotal: 0,
+      downloadTotal: 0,
+      error: err.message,
+    });
+  }
+});
+
+/** 断开所有或单个连接 */
+app.delete('/api/connections/:id?', async (req, res) => {
+  try {
+    const subpath = req.params.id ? `/${encodeURIComponent(req.params.id)}` : '';
+    await clashApi(`/connections${subpath}`, { method: 'DELETE' });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(502).json({ ok: false, error: err.message });
+  }
 });
 
 /** 实时连接数（概览用）。 */

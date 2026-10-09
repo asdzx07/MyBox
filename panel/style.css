@@ -745,3 +745,159 @@ pre.log {
   gap: 10px;
   margin-top: 20px;
 }
+
+/* 页面标题带操作栏 (核心设置/当前连接通用) */
+.page-head-with-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.page-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.page-title-row h2 {
+  margin: 0;
+}
+.version-tag {
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-weak);
+  color: var(--accent);
+}
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.head-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+  font-size: 12.5px;
+  padding: 6px 12px;
+  transition: all .2s ease;
+}
+.btn-ic {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+.text-purple { color: #a855f7; }
+.text-blue { color: var(--accent); }
+.text-green { color: var(--ok); }
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.animate-spin {
+  animation: spin 1s linear infinite;
+  display: inline-block;
+}
+
+/* 状态变色按钮 */
+button.btn-success {
+  background: var(--ok) !important;
+  color: #fff !important;
+  border-color: var(--ok) !important;
+  box-shadow: 0 2px 6px var(--ok-weak);
+}
+button.btn-warn {
+  background: var(--warn) !important;
+  color: #fff !important;
+  border-color: var(--warn) !important;
+}
+
+/* 版本与在线状态展板卡片 */
+.version-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.version-mini-card {
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color .15s;
+}
+.version-mini-card:hover {
+  border-color: var(--accent);
+}
+.version-mini-card .vmc-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.version-mini-card .vmc-val {
+  font-size: 20px;
+  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: -0.02em;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.version-mini-card .vmc-val small {
+  font-size: 12px;
+  font-weight: normal;
+  color: var(--text-3);
+}
+.version-mini-card .vmc-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11.5px;
+  color: var(--text-2);
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+/* 当前连接列表单条项增强 */
+.conn-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
+  transition: background .15s;
+}
+.conn-item:last-child {
+  border-bottom: none;
+}
+.conn-item:hover {
+  background: var(--surface-2);
+}
+.conn-meta-title {
+  font-weight: 600;
+  font-size: 13.5px;
+  word-break: break-all;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.conn-meta-sub {
+  font-size: 12px;
+  color: var(--text-2);
+  margin-top: 2px;
+}
