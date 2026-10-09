@@ -1,80 +1,90 @@
 @echo off
-title MyBox for Windows å¯åŠ¨å™¨
-chcp 65001 >nul
+chcp 936 >nul
+title MyBox for Windows ¿ØÖÆÌ¨
+cd /d "%~dp0"
 
-:: ========================================================
-:: 1. ç®¡ç†å‘˜æƒé™è‡ªææƒæ£€æµ‹ (UAC)
-:: ========================================================
+:: 1. ¹ÜÀíÔ±È¨ÏÞ¼ì²éÓë×Ô¶¯ÌáÈ¨
 net session >nul 2>&1
-if %errorLevel% neq 0 (
-    echo [æç¤º] æ­£åœ¨è¯·æ±‚ç®¡ç†å‘˜æƒé™ä»¥é…ç½®ç½‘ç»œåˆ†æµè·¯ç”±...
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
+if %errorlevel% neq 0 (
+    echo [1/4] ÕýÔÚÉêÇë¹ÜÀíÔ±È¨ÏÞÒÔÅäÖÃÍøÂç·ÖÁ÷Â·ÓÉ...
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/k cd /d \"\"%~dp0\"\" && \"\"%~f0\"\" :elevated' -Verb RunAs"
     exit /b
 )
 
-:: åˆ‡æ¢åˆ°å½“å‰è„šæœ¬æ‰€åœ¨ç›®å½•
-cd /d "%~dp0"
-
-echo ========================================================
-echo       MyBox for Windows æ¡Œé¢å®¢æˆ·ç«¯ (sing-box UI)
-echo ========================================================
+cls
+echo ============================================================
+echo          MyBox for Windows °éÂÂ¿Í»§¶Ë (sing-box UI)
+echo ============================================================
 echo.
 
-:: ========================================================
-:: 2. æ£€æŸ¥ Node.js çŽ¯å¢ƒ
-:: ========================================================
+:: 2. ¼ì²é Node.js ÔËÐÐÊ±
+echo [2/4] ÕýÔÚ¼ì²â Node.js ÔËÐÐ»·¾³...
+set NODE_CMD=
 where node >nul 2>&1
-if %errorLevel% neq 0 (
-    echo [é”™è¯¯] æœ¬æœºæœªæ£€æµ‹åˆ° Node.jsï¼Œè¯·å…ˆå®‰è£… Node.js (v18 æˆ–æ›´é«˜ç‰ˆæœ¬)ã€‚
-    echo ä¸‹è½½åœ°å€: https://nodejs.org/
+if %errorlevel% equ 0 set NODE_CMD=node
+if not defined NODE_CMD if exist "C:\nvm4w\nodejs\node.exe" set NODE_CMD=C:\nvm4w\nodejs\node.exe
+if not defined NODE_CMD if exist "C:\Program Files\nodejs\node.exe" set NODE_CMD=C:\Program Files\nodejs\node.exe
+
+if not defined NODE_CMD (
+    echo.
+    echo [´íÎó] ±¾»úÎ´¼ì²âµ½ Node.js£¬ÇëÏÈ°²×° Node.js (https://nodejs.org/)
+    echo °²×°Íê³ÉºóÇëÖØÐÂÔËÐÐ´Ë½Å±¾¡£
+    echo.
     pause
     exit /b 1
 )
 
-:: ========================================================
-:: 3. åœæ­¢å·²å­˜åœ¨çš„ 3038 ç«¯å£æ—§è¿›ç¨‹
-:: ========================================================
+:: 3. ÊÍ·Å 3038 ¶Ë¿Ú²¢Æô¶¯ºóÌ¨°éÂÂ·þÎñ
+echo [3/4] ÕýÔÚÆô¶¯±¾µØ·þÎñÓëÅÔÂ·ÓÉÁ¬½ÓÍø¹Ø...
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":3038" ^| findstr "LISTENING"') do (
-    if not "%%a"=="" (
-        taskkill /F /PID %%a >nul 2>&1
-    )
+    taskkill /F /PID %%a >nul 2>&1
 )
 
-:: ========================================================
-:: 4. åŽå°å¯åŠ¨æœ¬åœ°å¾®æœåŠ¡
-:: ========================================================
-echo [1/3] æ­£åœ¨å¯åŠ¨ MyBox ä¼´ä¾£æœåŠ¡...
-start /b "" node "%~dp0core\server.mjs" > "%temp%\mybox_client.log" 2>&1
+start "" /b "%NODE_CMD%" "%~dp0core\server.mjs"
 
-:: ç¨å€™ 1 ç§’ç­‰å¾…æœ¬åœ°ç«¯å£å°±ç»ª
-timeout /t 1 /nobreak >nul
+:: ÉÔºò 1.5 ÃëµÈ´ýÎ¢·þÎñ¾ÍÐ÷
+ping 127.0.0.1 -n 3 >nul
 
-:: ========================================================
-:: 5. è°ƒèµ·æ¡Œé¢ç‹¬ç«‹è§†çª—å®¢æˆ·ç«¯ (Edge App æ¨¡å¼)
-:: ========================================================
-echo [2/3] æ­£åœ¨æ‹‰èµ· sing-box é£Žæ ¼æ¡Œé¢å®¢æˆ·ç«¯è§†çª—...
+:: 4. À­Æð×ÀÃæÓ¦ÓÃÊÓ´°
+echo [4/4] ÕýÔÚµ÷Æð sing-box ·ç¸ñ¿Í»§¶ËÊÓ´°...
 
-set "EDGE_EXE="
-if exist "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" (
-    set "EDGE_EXE=%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe"
-) else if exist "%ProgramFiles%\Microsoft\Edge\Application\msedge.exe" (
-    set "EDGE_EXE=%ProgramFiles%\Microsoft\Edge\Application\msedge.exe"
-) else if exist "%LocalAppData%\Microsoft\Edge\Application\msedge.exe" (
-    set "EDGE_EXE=%LocalAppData%\Microsoft\Edge\Application\msedge.exe"
-)
+set EDGE_PATH=
+if exist "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" set EDGE_PATH="%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe"
+if not defined EDGE_PATH if exist "%ProgramFiles%\Microsoft\Edge\Application\msedge.exe" set EDGE_PATH="%ProgramFiles%\Microsoft\Edge\Application\msedge.exe"
+if not defined EDGE_PATH if exist "%LocalAppData%\Microsoft\Edge\Application\msedge.exe" set EDGE_PATH="%LocalAppData%\Microsoft\Edge\Application\msedge.exe"
 
-if defined EDGE_EXE (
-    start "" "%EDGE_EXE%" --app="http://127.0.0.1:3038" --window-size=1020,680 --user-data-dir="%temp%\mybox_edge_profile"
+if defined EDGE_PATH (
+    start "" %EDGE_PATH% --app="http://127.0.0.1:3038" --window-size=1020,680
 ) else (
-    start http://127.0.0.1:3038
+    start "" "http://127.0.0.1:3038"
 )
 
-echo [3/3] å®¢æˆ·ç«¯å¯åŠ¨æˆåŠŸï¼
+cls
+echo ============================================================
+echo         MyBox for Windows ×ÀÃæ¿Í»§¶ËÒÑÆô¶¯²¢½Ó¹ÜÍøÂç
+echo ============================================================
+echo   [?] ±¾µØ¿ØÖÆÌ¨: http://127.0.0.1:3038
+echo   [?] ÅÔÂ·ÓÉÍø¹Ø: 192.168.3.2 (MyBox ·ÖÁ÷ÒÑÉúÐ§)
+echo   [?] ¿Í»§¶ËÊÓ´°: ÒÑÔÚ×ÀÃæÒÔ sing-box ¼«¼ò½çÃæ³ÊÏÖ
+echo ============================================================
 echo.
-echo è¯´æ˜Žï¼š
-echo 1. æœ¬æœºä¿æŒä¸»è·¯ç”± 192.168.3.1 DHCP è‡ªåŠ¨åˆ†é… IP ä¸å˜ï¼›
-echo 2. å®¢æˆ·ç«¯ç•Œé¢å†…å¯ä¸€é”®æŽ¥ç®¡/æ–­å¼€æ—è·¯ç”±ï¼Œå¹¶å¯å®žæ—¶ä¿®æ”¹ MyBox ç­–ç•¥ä¸ŽèŠ‚ç‚¹ã€‚
-echo 3. è‹¥è¦é€€å‡ºï¼Œå¯åœ¨å®¢æˆ·ç«¯è®¾ç½®é¡µä¸­ç‚¹å‡»ã€Œé€€å‡ºåº”ç”¨ã€ï¼Œæˆ–è¿è¡Œã€Œä¸€é”®æ–­å¼€å¹¶è¿˜åŽŸç½‘ç»œ.batã€ã€‚
+echo   ²Ù×÷ÌáÊ¾£º
+echo   1. ±¾»ú±£³ÖÖ÷Â·ÓÉ (192.168.3.1) DHCP ×Ô¶¯»ñÈ¡ IP ²»±ä£»
+echo   2. ÔÚµ¯³öµÄ¿Í»§¶Ë´°¿ÚÖÐ¿ÉÖ±½ÓÇÐ»»½Úµã¡¢ÐÞ¸Ä·ÖÁ÷²ßÂÔ£»
+echo   3. ÈôÒªÍË³ö²¢»Ö¸´Ö÷Â·ÓÉÖ±Á¬£º
+echo      - ¿ÉÔÚ¿Í»§¶Ë¡¸ÉèÖÃ¡¹Ò³µã»÷¡¸ÍË³öÓ¦ÓÃ¡¹£»
+echo      - »òÔÚ´Ë´°¿Ú°´ÈÎÒâ¼ü³¹µ×»¹Ô­ÍøÂçºóÍË³ö¡£
 echo.
-timeout /t 3 /nobreak >nul
+echo ============================================================
+echo   °´ÈÎÒâ¼ü½«×Ô¶¯»¹Ô­ Windows Ä¬ÈÏÍøÂç²¢ÍË³ö...
+pause >nul
+
+echo.
+echo ÕýÔÚ»¹Ô­ÍøÂçÎªÄ¬ÈÏÖ÷Â·ÓÉÖ±Á¬£¬ÇëÉÔºò...
+"%NODE_CMD%" -e "import('./core/network.mjs').then(m => m.disconnectGateway('192.168.3.2'))" >nul 2>&1
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":3038" ^| findstr "LISTENING"') do (
+    taskkill /F /PID %%a >nul 2>&1
+)
+echo [Íê³É] ÒÑ»Ö¸´ Windows Ä¬ÈÏÍøÂç (Ö÷Â·ÓÉ 192.168.3.1 Ö±Á¬)¡£
+ping 127.0.0.1 -n 2 >nul
 exit /b 0
