@@ -418,9 +418,9 @@ function buildRoute(settings, names) {
         format: 'binary',
         url,
         update_interval: '24h',
-        // 1.15 起必须显式指定 download_detour，否则 FATAL 退出。
+        // 1.15 新格式：http_client.detour 代替已弃用的 download_detour。
         // 用兜底（代理）下载：从国内拉 GitHub 规则集走代理更稳。
-        download_detour: names.has(FALLBACK_TAG) ? FALLBACK_TAG : DIRECT_TAG,
+        http_client: { detour: names.has(FALLBACK_TAG) ? FALLBACK_TAG : DIRECT_TAG },
       });
     }
   }
