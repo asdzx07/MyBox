@@ -532,15 +532,51 @@ app.get('/api/system/version', async (req, res) => {
 
 app.post('/api/system/update', async (req, res) => {
   try {
-    const { exec } = await import('node:child_process');
-    const { promisify } = await import('node:util');
-    const execAsync = promisify(exec);
+    const { spawn } = await import('node:child_process');
+    const { ROOT } = await import('./lib/paths.mjs');
+    const path = await import('node:path');
+    const fs = await import('node:fs');
 
-    // 后台跑更新脚本，立即返回（脚本会重启面板，不能等它）
-    execAsync('curl -fsSL https://raw.githubusercontent.com/asdzx07/MyBox/main/scripts/update.sh | sh', {
-      timeout: 300000,
-    }).catch(() => {});
-    res.json({ ok: true, message: '更新已在后台开始，面板即将重启，请稍后刷新页面' });
+    const updateScript = path.join(ROOT, 'scripts', 'update.sh');
+    const logFile = path.join(ROOT, 'data', 'update.log');
+    
+    let cmd = 'sh';
+    let args = [];
+    if (fs.existsSync(updateScript)) {
+      args = [updateScript, '--mirror'];
+    } else {
+      cmd = 'sh';
+      args = ['-c', 'curl -fsSL https://ghfast.top/https://raw.githubusercontent.com/asdzx07/mybox/main/scripts/update.sh | sh -s -- --mirror'];
+    }
+
+    try {
+      const out = fs.openSync(logFile, 'w');
+      const child = spawn(cmd, args, {
+        detached: true,
+        stdio: ['ignore', out, out],
+      });
+      child.unref();
+    } catch (spawnErr) {
+      // 兜底直接 exec
+      const { exec } = await import('node:child_process');
+      exec(`${cmd} ${args.map((a) => `"${a}"`).join(' ')} > "${logFile}" 2>&1 &`);
+    }
+
+    log.info('系统更新脚本已触发');
+    res.json({ ok: true, message: '更新已在后台开始，面板服务即将重启，请稍后刷新页面' });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get('/api/system/update/log', async (req, res) => {
+  try {
+    const fs = await import('node:fs');
+    const { ROOT } = await import('./lib/paths.mjs');
+    const path = await import('node:path');
+    const logFile = path.join(ROOT, 'data', 'update.log');
+    if (!fs.existsSync(logFile)) return res.json({ ok: true, log: '' });
+    res.json({ ok: true, log: fs.readFileSync(logFile, 'utf8') });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -785,7 +821,12 @@ app.use((err, req, res, _next) => {
 function resolvePort() {
   const envPort = Number.parseInt(process.env.MYBOX_PORT || '', 10);
   if (Number.isFinite(envPort)) return envPort;
-  const saved = Number.parseInt(fs.readFileSync(PORT_FILE, 'utf8').trim(), 10);
+  let saved = null;
+  try {
+    if (fs.existsSync(PORT_FILE)) {
+      saved = Number.parseInt(fs.readFileSync(PORT_FILE, 'utf8').trim(), 10);
+    }
+  } catch {}
   return Number.isFinite(saved) ? saved : DEFAULT_PANEL_PORT;
 }
 

@@ -61,7 +61,8 @@ for d in server panel system; do
 done
 
 say "替换代码（data/ 不动）"
-for d in server panel system; do
+for d in server panel system tools scripts; do
+  [ -d "$SRCDIR/$d" ] || continue
   rm -rf "$ROOT/$d"
   cp -R "$SRCDIR/$d" "$ROOT/"
 done
@@ -103,7 +104,10 @@ if [ -f /etc/openwrt_release ]; then
   /etc/init.d/mybox-kernel status 2>/dev/null | grep -q running && KERNEL_WAS_RUNNING=1
 
   say "重启面板"
-  /etc/init.d/mybox-panel restart || die "面板重启失败，代码已备份在 $BACKUP"
+  /etc/init.d/mybox-panel stop 2>/dev/null || true
+  killall -9 node 2>/dev/null || true
+  sleep 1
+  /etc/init.d/mybox-panel start || /etc/init.d/mybox-panel restart || die "面板重启失败，代码已备份在 $BACKUP"
 
   if [ "$KERNEL_WAS_RUNNING" = "1" ]; then
     say "重启内核"

@@ -24,16 +24,34 @@ export function setPassword(password) {
 }
 
 export function verifyPassword(password) {
-  const { panel } = loadSettings();
-  if (!panel.passwordHash) return false;
-  const candidate = hashPassword(String(password ?? ''), panel.passwordSalt);
-  const a = Buffer.from(candidate, 'hex');
-  const b = Buffer.from(panel.passwordHash, 'hex');
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
+  const settings = loadSettings();
+  const panel = settings.panel;
+  if (!panel || !panel.passwordHash || !panel.passwordSalt) return false;
+  try {
+    const candidate = hashPassword(String(password ?? ''), panel.passwordSalt);
+    const a = Buffer.from(candidate, 'hex');
+    const b = Buffer.from(panel.passwordHash, 'hex');
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+}
+
+function getSessionSecret() {
+  const s = loadSettings();
+  if (s.panel?.sessionSecret) return s.panel.sessionSecret;
+  const gen = crypto.randomBytes(32).toString('hex');
+  try {
+    mutateSettings((sett) => {
+      sett.panel = sett.panel || {};
+      sett.panel.sessionSecret = gen;
+    });
+  } catch {}
+  return gen;
 }
 
 function sign(payload) {
-  const secret = loadSettings().panel.sessionSecret;
+  const secret = getSessionSecret();
   return crypto.createHmac('sha256', secret).update(payload).digest('hex');
 }
 
