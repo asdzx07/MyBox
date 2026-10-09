@@ -3,7 +3,7 @@
 module("luci.controller.mybox", package.seeall)
 
 function index()
-  entry({"admin", "services", "mybox"}, template("mybox/status"), "MyBox", 90).dependent = false
+  entry({"admin", "services", "mybox"}, template("mybox/status"), "MyBox 服务状态", 90).dependent = false
   entry({"admin", "services", "mybox", "status"}, call("action_status")).leaf = true
   entry({"admin", "services", "mybox", "service"}, call("action_service")).leaf = true
 end
