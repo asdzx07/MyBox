@@ -15,6 +15,8 @@ const CONFIG_FILE = path.resolve(__dirname, '../config.json');
 let config = {
   gatewayIp: '192.168.3.2',
   gatewayPort: 3036,
+  password: '',
+  sessionCookie: '',
   autoConnect: true,
 };
 
@@ -31,6 +33,38 @@ function saveConfig(next) {
   try {
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf8');
   } catch {}
+}
+
+async function loginRemoteGateway(password = config.password) {
+  if (!password) return false;
+  return new Promise((resolve) => {
+    const postData = JSON.stringify({ password });
+    const req = http.request(`http://${config.gatewayIp}:${config.gatewayPort}/api/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(postData),
+      },
+      timeout: 4000,
+    }, (res) => {
+      const setCookies = res.headers['set-cookie'];
+      if (setCookies) {
+        const found = setCookies.find(c => c.includes('mybox_session='));
+        if (found) {
+          const cookieVal = found.split(';')[0].trim();
+          config.sessionCookie = cookieVal;
+          saveConfig({ sessionCookie: cookieVal });
+          console.log('[MyBox Windows Companion] 旁路由登录成功，已获取会话 Cookie');
+          resolve(true);
+          return;
+        }
+      }
+      resolve(false);
+    });
+    req.on('error', () => resolve(false));
+    req.write(postData);
+    req.end();
+  });
 }
 
 const MIME_TYPES = {
@@ -59,6 +93,7 @@ const server = http.createServer(async (req, res) => {
       gatewayIp: config.gatewayIp,
       gatewayPort: config.gatewayPort,
       autoConnect: config.autoConnect,
+      hasPassword: Boolean(config.password),
       latency,
       interface: iface,
     }));
@@ -92,10 +127,13 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/local/config' && req.method === 'POST') {
     let bodyStr = '';
     req.on('data', chunk => { bodyStr += chunk; });
-    req.on('end', () => {
+    req.on('end', async () => {
       try {
         const body = JSON.parse(bodyStr || '{}');
         saveConfig(body);
+        if (body.password) {
+          await loginRemoteGateway(body.password);
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true, config }));
       } catch (err) {
@@ -128,11 +166,26 @@ const server = http.createServer(async (req, res) => {
     delete proxyHeaders['host'];
     proxyHeaders['host'] = `${config.gatewayIp}:${config.gatewayPort}`;
 
+    // 自动补齐已记录的旁路由 Session Cookie
+    if (!proxyHeaders['cookie'] && config.sessionCookie) {
+      proxyHeaders['cookie'] = config.sessionCookie;
+    }
+
     const proxyReq = http.request(targetUrl, {
       method: req.method,
       headers: proxyHeaders,
       timeout: 8000,
     }, (proxyRes) => {
+      // 记录旁路由返回的 Session Cookie
+      const setCookies = proxyRes.headers['set-cookie'];
+      if (setCookies) {
+        const found = setCookies.find(c => c.includes('mybox_session='));
+        if (found) {
+          config.sessionCookie = found.split(';')[0].trim();
+          saveConfig({ sessionCookie: config.sessionCookie });
+        }
+      }
+
       res.writeHead(proxyRes.statusCode, proxyRes.headers);
       proxyRes.pipe(res);
     });
@@ -176,6 +229,11 @@ server.listen(PORT, '127.0.0.1', () => {
     } catch (err) {
       console.warn(`[MyBox Windows Companion] 自动连接旁路由失败 (可能需要管理员权限):`, err.message);
     }
+  }
+
+  // 若已配置密码，自动登录并同步会话
+  if (config.password) {
+    loginRemoteGateway().catch(() => {});
   }
 });
 
