@@ -381,10 +381,18 @@ function buildRoute(settings, names) {
       });
     }
 
+    // 真域名判断（抄 Open-Box）：geoip 规则只管裸 IP，不管域名。
+    // domain_regex ^[^:]*[a-z][^:]*$ 匹配"含字母的真域名"，invert 后就是"裸 IP"。
+    // 避免外国域名解析到国内 CDN IP 时被误判为国内流量。
+    const hasGeoip = (p.rulesets || []).some((t) => t.startsWith('geoip-'));
+    const domainCheck = hasGeoip
+      ? [{ domain_regex: ['^[^:]*[a-z][^:]*$'], invert: true }]
+      : [];
+
     rules.push({
       type: 'logical',
       mode: 'and',
-      rules: [...conditions, switchRule],
+      rules: [...conditions, ...domainCheck, switchRule],
       outbound: target,
     });
   }
