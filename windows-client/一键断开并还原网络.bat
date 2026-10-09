@@ -1,40 +1,45 @@
 @echo off
-title MyBox for Windows ç½‘ç»œè¿˜åŽŸå·¥å…·
-chcp 65001 >nul
+setlocal
+title MyBox for Windows ÍøÂç»¹Ô­¹¤¾ß
+cd /d "%~dp0"
 
-:: ========================================================
-:: 1. ç®¡ç†å‘˜æƒé™è‡ªææƒæ£€æµ‹ (UAC)
-:: ========================================================
+:: 1. ¹ÜÀíÔ±È¨ÏÞ¼ì²éÓë×Ô¶¯ÌáÈ¨
 net session >nul 2>&1
 if %errorLevel% neq 0 (
-    echo [æç¤º] æ­£åœ¨è¯·æ±‚ç®¡ç†å‘˜æƒé™ä»¥è¿˜åŽŸç½‘ç»œè·¯ç”±å’Œ DNS...
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
+    echo ÕýÔÚÉêÇë¹ÜÀíÔ±È¨ÏÞÒÔ»¹Ô­ÍøÂçÂ·ÓÉ...
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/c cd /d \"\"%~dp0\"\" && \"\"%~f0\"\"' -Verb RunAs"
     exit /b
 )
 
-echo ========================================================
-echo       æ­£åœ¨å½»åº•æ¸…ç†æ—è·¯ç”±ä¸´æ—¶è·¯ç”±ï¼Œè¿˜åŽŸ Windows é»˜è®¤ç½‘ç»œ
-echo ========================================================
+cls
+echo ============================================================
+echo          ÕýÔÚ³¹µ×ÇåÀíÅÔÂ·ÓÉÁÙÊ±Â·ÓÉ£¬»¹Ô­ Windows Ä¬ÈÏÍøÂç
+echo ============================================================
 echo.
 
-:: 1. åœæ­¢å®¢æˆ·ç«¯æœ¬åœ°åŽå°æœåŠ¡ (ç«¯å£ 3038)
+:: 1. Í£Ö¹¿Í»§¶Ë±¾µØºóÌ¨·þÎñ (¶Ë¿Ú 3038)
+echo [1/4] ÕýÔÚ¹Ø±Õ±¾µØ°éÂÂ·þÎñ...
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":3038" ^| findstr "LISTENING"') do (
-    if not "%%a"=="" (
-        taskkill /F /PID %%a >nul 2>&1
-    )
+    taskkill /F /PID %%a >nul 2>&1
 )
 
-:: 2. åˆ é™¤æŒ‡å‘ 192.168.3.2 æ—è·¯ç”±çš„ä½Žè·ƒç‚¹ä¸´æ—¶é»˜è®¤è·¯ç”±
+:: 2. É¾³ýÖ¸Ïò 192.168.3.2 ÅÔÂ·ÓÉµÄµÍÔ¾µãÁÙÊ±Ä¬ÈÏÂ·ÓÉ
+echo [2/4] ÕýÔÚÉ¾³ýÅÔÂ·ÓÉ·ÖÁ÷Ä¬ÈÏÂ·ÓÉ...
 route delete 0.0.0.0 192.168.3.2 >nul 2>&1
 
-:: 3. æ¢å¤æ‰€æœ‰æ´»åŠ¨ç‰©ç†ç½‘å¡çš„ DNS ä¸ºè‡ªåŠ¨èŽ·å– (DHCP)
+:: 3. »Ö¸´ËùÓÐ»î¶¯ÎïÀíÍø¿¨µÄ DNS Îª×Ô¶¯»ñÈ¡ (DHCP)
+echo [3/4] ÕýÔÚ»Ö¸´Íø¿¨ DNS Îª×Ô¶¯»ñÈ¡ (DHCP)...
 powershell -NoProfile -Command "Get-NetIPInterface -AddressFamily IPv4 | Where-Object { $_.ConnectionState -eq 'Connected' } | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.InterfaceIndex -ResetServerAddresses }" >nul 2>&1
 
-:: 4. åˆ·æ–°æœ¬åœ° DNS ç¼“å­˜
+:: 4. Ë¢ÐÂ±¾µØ DNS »º´æ
+echo [4/4] ÕýÔÚÇåÀí±¾µØ DNS »º´æ...
 ipconfig /flushdns >nul 2>&1
 
-echo [å®Œæˆ] Windows æœ¬åœ°ç½‘ç»œå·²å½»åº•æ¢å¤ï¼
-echo å½“å‰ç½‘ç»œçŠ¶æ€ï¼šå·²æ¢å¤ä¸»è·¯ç”± (192.168.3.1) ç›´è¿žä¸Žè‡ªåŠ¨èŽ·å– DNSã€‚
+echo.
+echo ============================================================
+echo [Íê³É] Windows ±¾µØÍøÂçÒÑ³¹µ×»Ö¸´£¡
+echo µ±Ç°ÍøÂç×´Ì¬£ºÒÑ»Ö¸´Ö÷Â·ÓÉ (192.168.3.1) Ö±Á¬Óë×Ô¶¯»ñÈ¡ DNS¡£
+echo ============================================================
 echo.
 pause
 exit /b 0
