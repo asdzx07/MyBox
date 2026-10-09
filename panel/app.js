@@ -764,6 +764,74 @@ function policyIcon(name = '') {
   return '🎯 ';
 }
 
+/**
+ * 组装策略出口目标的下拉选项 HTML：支持内置出口、节点分组、所有单节点、以及保留现有自定义值
+ */
+function getTargetOptionsHtml(currentTarget = '') {
+  const builtins = [
+    { val: 'all-auto', label: '所有-自动 (自动择优)' },
+    { val: 'all-manual', label: '所有-手动 (手动切换)' },
+    { val: 'direct', label: '直连 (direct - 绕过代理)' },
+    { val: 'block', label: '拒绝 (block - 阻止连接)' },
+  ];
+
+  const groupSet = new Set(['all-auto', 'all-manual', 'direct', 'block', 'builtin-direct', 'builtin-block']);
+  const customGroups = [];
+  for (const g of (state.groups || [])) {
+    if (g.name && !groupSet.has(g.name)) {
+      groupSet.add(g.name);
+      customGroups.push(g.name);
+    }
+  }
+  for (const g of (state.nodeGroups || [])) {
+    if (g.name && !groupSet.has(g.name)) {
+      groupSet.add(g.name);
+      customGroups.push(g.name);
+    }
+  }
+
+  const nodes = (state.nodeList || []).map((n) => n.name).filter(Boolean);
+
+  let html = '<optgroup label="基础目标">';
+  for (const b of builtins) {
+    const isSelected = (b.val === currentTarget)
+      || (b.val === 'direct' && currentTarget === 'builtin-direct')
+      || (b.val === 'block' && currentTarget === 'builtin-block');
+    html += `<option value="${escapeHtml(b.val)}"${isSelected ? ' selected' : ''}>${escapeHtml(b.label)}</option>`;
+  }
+  html += '</optgroup>';
+
+  if (customGroups.length) {
+    html += '<optgroup label="出站分组">';
+    for (const g of customGroups) {
+      html += `<option value="${escapeHtml(g)}"${g === currentTarget ? ' selected' : ''}>${escapeHtml(g)}</option>`;
+    }
+    html += '</optgroup>';
+  }
+
+  if (nodes.length) {
+    html += '<optgroup label="指定单个节点">';
+    for (const n of nodes) {
+      html += `<option value="${escapeHtml(n)}"${n === currentTarget ? ' selected' : ''}>${escapeHtml(n)}</option>`;
+    }
+    html += '</optgroup>';
+  }
+
+  // 兜底保留：如果已有值不在列表中，不丢失配置
+  const allKnown = new Set([
+    ...builtins.map((b) => b.val),
+    'builtin-direct',
+    'builtin-block',
+    ...customGroups,
+    ...nodes,
+  ]);
+  if (currentTarget && !allKnown.has(currentTarget)) {
+    html += `<optgroup label="当前配置"><option value="${escapeHtml(currentTarget)}" selected>${escapeHtml(currentTarget)}</option></optgroup>`;
+  }
+
+  return html;
+}
+
 function renderPolicies() {
   const box = $('policyList');
   if (!state.policies.length) {
@@ -774,24 +842,33 @@ function renderPolicies() {
 
   box.innerHTML = state.policies.map((p, i) => {
     const collapsed = isCol(i);
+    const targetVal = p.target || 'all-auto';
     return `
     <div class="card" style="background:var(--surface-2);margin-bottom:12px">
       <div class="card-head group-head" data-policy-collapse="${i}" style="cursor:pointer;margin-bottom:${collapsed ? '0' : '12px'}">
         <span class="chevron">${collapsed ? '▸' : '▾'}</span>
         <h3 style="display:flex;align-items:center;gap:6px">${policyIcon(p.name)}${escapeHtml(p.name)}</h3>
         <span class="tag muted" data-p-status="${i}">${p.enabled ? '已启用' : '已关闭'}</span>
-        <span class="note" style="font-size:12px;margin-left:6px">出口：<strong style="color:var(--accent)">${escapeHtml(p.target || 'all-auto')}</strong></span>
+        <span class="note" style="font-size:12px;margin-left:6px">出口：<strong style="color:var(--accent)" id="policyTargetLabel-${i}">${escapeHtml(targetVal)}</strong></span>
         <div class="spacer"></div>
         <label class="switch" onclick="event.stopPropagation()">
           <input type="checkbox" data-p-enabled="${i}"${p.enabled ? ' checked' : ''}>
           <span></span>
         </label>
-        <button class="small danger" data-p-remove="${i}" onclick="event.stopPropagation()">删除</button>
+        <button class="small danger" onclick="removePolicy(${i}, event)">删除</button>
       </div>
       <div data-p-body="${i}" class="${collapsed ? 'hidden' : ''}">
         <div class="row">
-          <label class="field"><span>策略名称</span><input data-p-name="${i}" value="${escapeHtml(p.name || '')}"></label>
-          <label class="field"><span>出口目标（直连/拒绝/分组）</span><input data-p-target="${i}" value="${escapeHtml(p.target || '')}"></label>
+          <label class="field" style="flex:1 1 200px">
+            <span>策略名称</span>
+            <input data-p-name="${i}" value="${escapeHtml(p.name || '')}">
+          </label>
+          <label class="field" style="flex:1 1 240px">
+            <span>出口目标（直连/拒绝/分组/节点）</span>
+            <select data-p-target="${i}" onchange="updatePolicyTarget(${i}, this.value)">
+              ${getTargetOptionsHtml(targetVal)}
+            </select>
+          </label>
         </div>
         <div class="row">
           <label class="field"><span>规则集 (rulesets)</span><input data-p-rulesets="${i}" value="${escapeHtml(p.rulesets?.join(', ') || '')}"></label>
@@ -803,30 +880,122 @@ function renderPolicies() {
   }).join('');
 }
 
+window.updatePolicyTarget = function(index, val) {
+  if (state.policies[index]) {
+    state.policies[index].target = val;
+    const labelEl = $(`policyTargetLabel-${index}`);
+    if (labelEl) labelEl.textContent = val;
+  }
+};
+
+window.removePolicy = function(index, event) {
+  if (event) {
+    event.stopPropagation();
+    event.preventDefault();
+  }
+  const p = state.policies[index];
+  if (!p) return;
+  if (!confirm(`确定删除分流策略「${p.name || '未命名策略'}」吗？`)) return;
+  state.policies.splice(index, 1);
+  renderPolicies();
+  toast('已删除策略，记得点击下方「保存策略」生效');
+};
+
+/* ---------------------------------------------------------- 自定义规则集订阅 */
+
 async function loadRulesetSubs() {
+  const box = $('rulesetSubList');
   try {
     const data = await api('/ruleset-subs');
-    const list = data.subscriptions || [];
-    const box = $('rulesetSubList');
+    const list = data.items || data.subscriptions || [];
+    if (!box) return;
     if (!list.length) {
-      box.innerHTML = '<p class="note">还没有自定义规则集订阅。</p>';
+      box.innerHTML = '<p class="note" style="padding:10px 0">暂无自定义规则集订阅。点击右上角「添加」可引入远程规则集。</p>';
       return;
     }
     box.innerHTML = list.map((r) => `
       <div class="item">
         <label class="switch">
-          <input type="checkbox" data-rs-enabled="${escapeHtml(r.id)}"${r.enabled ? ' checked' : ''}>
+          <input type="checkbox" ${r.enabled ? 'checked' : ''} onchange="toggleRulesetSub('${escapeHtml(r.id)}', this.checked)">
           <span></span>
         </label>
         <div class="grow">
-          <div class="title">${escapeHtml(r.tag)}</div>
-          <div class="sub">${escapeHtml(r.url)}</div>
+          <div class="title" style="font-weight:600">
+            ${escapeHtml(r.tag)}
+            <span class="tag muted" style="font-size:11px;margin-left:6px">${r.format === 'source' ? 'Source' : 'Binary'}</span>
+          </div>
+          <div class="sub" style="font-size:12px;color:var(--text-2);word-break:break-all">${escapeHtml(r.url)}</div>
         </div>
-        <button class="small danger" data-rs-del="${escapeHtml(r.id)}">删除</button>
+        <button class="small danger" onclick="removeRulesetSub('${escapeHtml(r.id)}')">删除</button>
       </div>
     `).join('');
-  } catch {}
+  } catch (err) {
+    if (box) box.innerHTML = `<p class="err-text">加载规则集失败：${escapeHtml(err.message)}</p>`;
+  }
 }
+
+window.openRulesetModal = function() {
+  const modal = $('rulesetModal');
+  if (!modal) return;
+  $('modalRsTag').value = '';
+  $('modalRsUrl').value = '';
+  $('modalRsFormat').value = 'binary';
+  modal.classList.remove('hidden');
+};
+
+window.closeRulesetModal = function() {
+  const modal = $('rulesetModal');
+  if (modal) modal.classList.add('hidden');
+};
+
+async function saveRulesetModal() {
+  const tag = $('modalRsTag')?.value.trim();
+  const url = $('modalRsUrl')?.value.trim();
+  const format = $('modalRsFormat')?.value || 'binary';
+  if (!tag) {
+    toast('请输入规则集标识 (Tag)');
+    return;
+  }
+  if (!url) {
+    toast('请输入规则集订阅 URL');
+    return;
+  }
+  try {
+    await api('/ruleset-subs', {
+      method: 'POST',
+      body: { tag, url, format },
+    });
+    closeRulesetModal();
+    await loadRulesetSubs();
+    toast(`已添加规则集「${tag}」，改动已保存`);
+  } catch (err) {
+    toast(`添加失败：${err.message}`);
+  }
+}
+
+window.toggleRulesetSub = async function(id, enabled) {
+  try {
+    await api(`/ruleset-subs/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: { enabled },
+    });
+    toast(enabled ? '已启用该规则集订阅' : '已停用该规则集订阅');
+  } catch (err) {
+    toast(`更新状态失败：${err.message}`);
+    loadRulesetSubs();
+  }
+};
+
+window.removeRulesetSub = async function(id) {
+  if (!confirm('确认删除该规则集订阅？')) return;
+  try {
+    await api(`/ruleset-subs/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    toast('已删除规则集订阅');
+    await loadRulesetSubs();
+  } catch (err) {
+    toast(`删除失败：${err.message}`);
+  }
+};
 
 /* --------------------------------------------------------------- 核心设置与日志 */
 
@@ -1239,6 +1408,14 @@ function bindEvents() {
       policy.enabled = !t.checked;
       toast(err.message);
     }
+  });
+
+  // 自定义规则集订阅弹窗按键
+  $('btnAddRulesetSub')?.addEventListener('click', openRulesetModal);
+  $('btnCancelRulesetModal')?.addEventListener('click', closeRulesetModal);
+  $('btnSaveRulesetModal')?.addEventListener('click', saveRulesetModal);
+  $('rulesetModal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'rulesetModal') closeRulesetModal();
   });
 
   // 设置页右上角核心操作 1: 保存并部署 (带完整成功变绿动效)
