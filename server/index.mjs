@@ -14,6 +14,7 @@ import {
 } from './lib/auth.mjs';
 import { parseSubscription, dedupeTags } from './lib/subscription.mjs';
 import * as kernel from './lib/kernel.mjs';
+import { startTrafficMonitor, getTraffic, resetTrafficTotals } from './lib/traffic.mjs';
 import * as deploy from './lib/deploy.mjs';
 import * as netstack from './lib/netstack.mjs';
 import * as platform from './lib/platform.mjs';
@@ -183,6 +184,60 @@ app.delete('/api/subscriptions/:id', (req, res) => {
     s.subscriptions = s.subscriptions.filter((x) => x.id !== req.params.id);
     s.nodes = s.nodes.filter((n) => n.__subscriptionId !== req.params.id);
   });
+  res.json({ ok: true });
+});
+
+/* ---------------------------------------------------------- 规则集订阅 */
+
+app.get('/api/ruleset-subs', (req, res) => {
+  const s = loadSettings();
+  res.json({ ok: true, items: s.rulesetSubs || [] });
+});
+
+app.post('/api/ruleset-subs', (req, res) => {
+  const { tag, url, format } = req.body || {};
+  if (!tag || !url) return res.status(400).json({ ok: false, error: '缺少 tag 或 url' });
+  const item = {
+    id: `rs${Date.now()}`,
+    tag: String(tag).trim(),
+    url: String(url).trim(),
+    format: format === 'source' ? 'source' : 'binary',
+    enabled: true,
+  };
+  mutateSettings((s) => {
+    s.rulesetSubs = [...(s.rulesetSubs || []), item];
+  });
+  res.json({ ok: true, item });
+});
+
+app.put('/api/ruleset-subs/:id', (req, res) => {
+  const { tag, url, format, enabled } = req.body || {};
+  mutateSettings((s) => {
+    const t = (s.rulesetSubs || []).find((x) => x.id === req.params.id);
+    if (!t) return;
+    if (tag !== undefined) t.tag = String(tag).trim();
+    if (url !== undefined) t.url = String(url).trim();
+    if (format !== undefined) t.format = format === 'source' ? 'source' : 'binary';
+    if (enabled !== undefined) t.enabled = Boolean(enabled);
+  });
+  res.json({ ok: true });
+});
+
+app.delete('/api/ruleset-subs/:id', (req, res) => {
+  mutateSettings((s) => {
+    s.rulesetSubs = (s.rulesetSubs || []).filter((x) => x.id !== req.params.id);
+  });
+  res.json({ ok: true });
+});
+
+/* -------------------------------------------------------------- 流量统计 */
+
+app.get('/api/traffic', (req, res) => {
+  res.json({ ok: true, ...getTraffic() });
+});
+
+app.post('/api/traffic/reset', (req, res) => {
+  resetTrafficTotals();
   res.json({ ok: true });
 });
 
@@ -666,6 +721,7 @@ if (problem) {
 const server = app.listen(port, '0.0.0.0', () => {
   log.info('MyBox 面板已启动：http://0.0.0.0:%d', port);
   if (!isPasswordSet()) log.warn('还没有设置面板密码，请打开面板完成初始化');
+  startTrafficMonitor();
 });
 
 /**

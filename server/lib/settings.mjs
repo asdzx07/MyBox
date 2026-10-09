@@ -119,6 +119,7 @@ export function defaultSettings() {
       adblockCustom: [],
     },
     subscriptions: [],
+    rulesetSubs: [],
     nodes: [],
     groups: [
       { id: 'all-auto', name: '所有-自动', type: 'urltest', enabled: true, members: [], interval: '300s', tolerance: 100, idleTimeout: '12h' },

@@ -499,6 +499,21 @@ function buildRoute(settings, names) {
     }
   }
 
+  // 用户自定义规则集订阅
+  for (const rs of settings.rulesetSubs || []) {
+    if (!rs.enabled || !rs.url || !rs.tag) continue;
+    if (seen.has(rs.tag)) continue;
+    seen.add(rs.tag);
+    ruleSets.push({
+      type: 'remote',
+      tag: rs.tag,
+      format: rs.format || 'binary',
+      url: rs.url,
+      update_interval: '24h',
+      http_client: { detour: names.has(FALLBACK_TAG) ? FALLBACK_TAG : DIRECT_TAG },
+    });
+  }
+
   return {
     rules,
     rule_set: ruleSets,

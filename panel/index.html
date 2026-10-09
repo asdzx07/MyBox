@@ -76,6 +76,20 @@
 
       <div class="card">
         <div class="card-head">
+          <h3>实时流量</h3>
+          <div class="spacer"></div>
+          <button class="small" id="btnTrafficReset">清零</button>
+        </div>
+        <div class="grid">
+          <div class="stat"><div class="k">↑ 上传</div><div class="v" id="statUp" style="font-size:16px">—</div></div>
+          <div class="stat"><div class="k">↓ 下载</div><div class="v" id="statDown" style="font-size:16px">—</div></div>
+          <div class="stat"><div class="k">累计上传</div><div class="v" id="statTotalUp" style="font-size:14px">—</div></div>
+          <div class="stat"><div class="k">累计下载</div><div class="v" id="statTotalDown" style="font-size:14px">—</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
           <h3>节点组</h3>
           <div class="spacer"></div>
           <button class="small" id="btnOverviewNodes">刷新</button>
@@ -191,6 +205,15 @@
           去「节点」页把「兜底」切到「直连」。
           <br>规则集（geosite/geoip）每天自动更新，点「更新规则集」立即更新。
         </p>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h3>自定义规则集订阅</h3>
+          <div class="spacer"></div>
+          <button class="small" id="btnAddRulesetSub">添加</button>
+        </div>
+        <div id="rulesetSubList"></div>
+        <p class="note" style="margin-top:10px">添加第三方规则集 URL（如广告过滤、自定义分流），tag 会在策略的规则集里可用。改完记得「保存并部署」。</p>
       </div>
     </section>
 

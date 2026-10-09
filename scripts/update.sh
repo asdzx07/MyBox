@@ -83,6 +83,14 @@ if [ -f /etc/openwrt_release ]; then
     [ -f "$ROOT/system/openwrt/initd/$s" ] && put 0755 "$ROOT/system/openwrt/initd/$s" "/etc/init.d/$s"
   done
 
+  say "安装 LuCI 兜底页"
+  if [ -f "$ROOT/system/openwrt/luci/controller/mybox.lua" ]; then
+    mkdir -p /usr/lib/lua/luci/controller /usr/lib/lua/luci/view/mybox
+    cp "$ROOT/system/openwrt/luci/controller/mybox.lua" /usr/lib/lua/luci/controller/mybox.lua
+    cp "$ROOT/system/openwrt/luci/view/mybox/status.htm" /usr/lib/lua/luci/view/mybox/status.htm
+    rm -rf /tmp/luci-indexcache 2>/dev/null || true
+  fi
+
   KERNEL_WAS_RUNNING=0
   /etc/init.d/mybox-kernel status 2>/dev/null | grep -q running && KERNEL_WAS_RUNNING=1
 

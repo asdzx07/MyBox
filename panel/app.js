@@ -243,6 +243,35 @@ async function loadAll() {
   await Promise.all([loadOverview(), loadSubscriptions(), loadGroups(), loadPolicies(), loadSettings()]);
 }
 
+function fmtBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+  if (b < 1024 * 1024 * 1024) return (b / 1024 / 1024).toFixed(1) + ' MB';
+  return (b / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+}
+function fmtSpeed(bps) {
+  return fmtBytes(bps) + '/s';
+}
+
+let trafficTimer = null;
+async function loadTraffic() {
+  try {
+    const t = await api('/traffic');
+    if (!t.ok) return;
+    $('statUp').textContent = t.connected ? fmtSpeed(t.up) : '—';
+    $('statDown').textContent = t.connected ? fmtSpeed(t.down) : '—';
+    $('statTotalUp').textContent = fmtBytes(t.totalUp);
+    $('statTotalDown').textContent = fmtBytes(t.totalDown);
+  } catch {}
+}
+function startTrafficPoll() {
+  if (trafficTimer) return;
+  loadTraffic();
+  trafficTimer = setInterval(() => {
+    if ($('page-overview').classList.contains('active')) loadTraffic();
+  }, 2000);
+}
+
 async function loadOverview() {
   try {
     const data = await api('/overview');
@@ -447,6 +476,25 @@ async function loadPolicies() {
   state.policies = data.policies;
   state.targets = data.targets;
   renderPolicies();
+  loadRulesetSubs();
+}
+
+async function loadRulesetSubs() {
+  const { items } = await api('/ruleset-subs');
+  const el = $('rulesetSubList');
+  if (!items.length) {
+    el.innerHTML = '<p class="note">还没有自定义规则集。</p>';
+    return;
+  }
+  el.innerHTML = items.map((r) => `
+    <div class="row" style="align-items:center;gap:8px;margin-bottom:8px">
+      <label class="switch"><input type="checkbox" data-rs-enabled="${r.id}" ${r.enabled ? 'checked' : ''}><span></span></label>
+      <code>${escapeHtml(r.tag)}</code>
+      <span class="note" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(r.url)}</span>
+      <span class="tag">${r.format}</span>
+      <button class="small danger" data-rs-del="${r.id}">删</button>
+    </div>
+  `).join('');
 }
 
 async function loadSettings() {
@@ -601,6 +649,12 @@ function bindEvents() {
   });
 
   $('btnDeploy').addEventListener('click', (e) => doDeploy(e.currentTarget));
+  $('btnTrafficReset').addEventListener('click', async () => {
+    await api('/traffic/reset', { method: 'POST' });
+    toast('流量统计已清零');
+    loadTraffic();
+  });
+  startTrafficPoll();
   $('btnRestart').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
     await api('/kernel/restart', { method: 'POST' });
     toast('内核已重启');
@@ -763,6 +817,30 @@ function bindEvents() {
     const r = await api('/rulesets/refresh', { method: 'POST' });
     toast(r.ok ? `规则集已更新（删了 ${r.deleted} 个缓存），内核已重启` : ('更新失败：' + (r.error || '未知错误')));
   }));
+  $('btnAddRulesetSub').addEventListener('click', async () => {
+    const tag = prompt('规则集 tag（在策略里引用，如 my-rules）：');
+    if (!tag) return;
+    const url = prompt('规则集 URL（.srs 或 .json）：');
+    if (!url) return;
+    const format = confirm('是 binary（.srs）格式吗？点"确定"=binary，点"取消"=source（.json）') ? 'binary' : 'source';
+    const r = await api('/ruleset-subs', { method: 'POST', body: JSON.stringify({ tag, url, format }) });
+    if (r.ok) { toast('已添加，记得「保存并部署」'); loadRulesetSubs(); }
+    else toast('添加失败：' + (r.error || '未知错误'));
+  });
+  $('rulesetSubList').addEventListener('change', async (e) => {
+    const id = e.target.dataset.rsEnabled;
+    if (!id) return;
+    await api(`/ruleset-subs/${id}`, { method: 'PUT', body: JSON.stringify({ enabled: e.target.checked }) });
+    toast('已' + (e.target.checked ? '启用' : '停用') + '，记得「保存并部署」');
+  });
+  $('rulesetSubList').addEventListener('click', async (e) => {
+    const id = e.target.dataset.rsDel;
+    if (!id) return;
+    if (!confirm('删除这个规则集订阅？')) return;
+    await api(`/ruleset-subs/${id}`, { method: 'DELETE' });
+    loadRulesetSubs();
+    toast('已删除，记得「保存并部署」');
+  });
 
   $('btnSaveSettings').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
     const patch = {

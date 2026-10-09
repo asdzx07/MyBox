@@ -1,0 +1,54 @@
+<%+header%>
+<h2>MyBox 服务状态（兜底页）</h2>
+<p>主面板打不开时，在这里启停服务。正常情况请用主面板。</p>
+
+<div class="cbi-section">
+  <table class="table">
+    <tr><th>服务</th><th>状态</th><th>版本</th><th>操作</th></tr>
+    <tr>
+      <td>面板 mybox-panel</td>
+      <td id="st-panel">…</td>
+      <td id="ver-panel">…</td>
+      <td>
+        <button class="btn" onclick="svc('panel','start')">启动</button>
+        <button class="btn" onclick="svc('panel','stop')">停止</button>
+        <button class="btn" onclick="svc('panel','restart')">重启</button>
+      </td>
+    </tr>
+    <tr>
+      <td>内核 mybox-kernel</td>
+      <td id="st-kernel">…</td>
+      <td id="ver-kernel">…</td>
+      <td>
+        <button class="btn" onclick="svc('kernel','start')">启动</button>
+        <button class="btn" onclick="svc('kernel','stop')">停止</button>
+        <button class="btn" onclick="svc('kernel','restart')">重启</button>
+      </td>
+    </tr>
+  </table>
+  <button class="btn" onclick="load()">刷新状态</button>
+</div>
+
+<script>
+function load() {
+  fetch('<%=url("admin/services/mybox/status")%>')
+    .then(r => r.json())
+    .then(d => {
+      document.getElementById('st-panel').textContent = d.panel;
+      document.getElementById('st-kernel').textContent = d.kernel;
+      document.getElementById('ver-panel').textContent = d.panel_version || '—';
+      document.getElementById('ver-kernel').textContent = d.kernel_version || '—';
+    })
+    .catch(() => alert('获取状态失败'));
+}
+function svc(s, op) {
+  if (!confirm('确定' + {start:'启动',stop:'停止',restart:'重启'}[op] + ' mybox-' + s + '？')) return;
+  fetch('<%=url("admin/services/mybox/service")%>', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: 'svc=' + s + '&op=' + op
+  }).then(() => setTimeout(load, 1500));
+}
+load();
+</script>
+<%+footer%>

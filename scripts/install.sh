@@ -229,6 +229,11 @@ if [ "$PLATFORM" = openwrt ]; then
   for s in mybox-panel mybox-kernel; do
     put 0755 "$ROOT/system/openwrt/initd/$s" "/etc/init.d/$s"
   done
+  # LuCI 兜底页
+  mkdir -p /usr/lib/lua/luci/controller /usr/lib/lua/luci/view/mybox
+  cp "$ROOT/system/openwrt/luci/controller/mybox.lua" /usr/lib/lua/luci/controller/mybox.lua
+  cp "$ROOT/system/openwrt/luci/view/mybox/status.htm" /usr/lib/lua/luci/view/mybox/status.htm
+  rm -rf /tmp/luci-indexcache 2>/dev/null || true
   /etc/init.d/mybox-panel enable >/dev/null 2>&1 || warn "开机自启设置失败"
   /etc/init.d/mybox-panel start >/dev/null 2>&1 || warn "面板启动失败，看 logread -e mybox"
   sleep 1
