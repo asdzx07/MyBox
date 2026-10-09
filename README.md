@@ -34,6 +34,7 @@
 | 📦 **全协议订阅解析** | 支持 Base64 节点链接、Clash YAML、sing-box JSON 等多种订阅格式；全面支持 VLESS（REALITY）、VMess、Trojan、Shadowsocks、Hysteria 2、TUIC。 |
 | 🌐 **DNS 深度防污染** | 支持 dnsmasq 协同接管与 Fake-IP 模式，有效屏蔽 HTTPS/SVCB 绕过，杜绝 DNS 泄漏，内置防广告过滤（AdBlock）。 |
 | 🚀 **一键安装与在线升级** | 脚本全自动探测平台与架构（x86_64 / aarch64 等），面板内置版本更新检测，支持一键无感热升级。 |
+| 🪟 **Windows 专属伴侣客户端** | 保持主路由 DHCP 自动分配 IP 不变，双击即连旁路由代理；深度复刻官方 sing-box UI，可在桌面直接改策略与切节点。 |
 
 ---
 
@@ -172,6 +173,12 @@ node /opt/mybox/server/tools/reset-password.mjs <新密码>
 2. <b>默认网关</b>：填写运行 MyBox 的设备 IP；
 3. <b>DNS 服务器</b>：填写运行 MyBox 的设备 IP。
 所有设备流量即可由 MyBox 自动接管并分流。
+</details>
+
+<details>
+<summary><b>Q: Windows 电脑不想每次手动改网卡固定 IP 和网关怎么办？</b></summary>
+使用仓库内置的 <code>windows-client</code> 桌面伴侣客户端！
+本地网卡<b>永久保持主路由 DHCP 自动分配 IP 不变</b>，直接双击运行 <code>windows-client/启动MyBox.bat</code>，即可瞬间无感接入旁路由接管流量；支持一键断开恢复主路由直连，并可在客户端内直接修改 MyBox 的分流策略与切换节点。
 </details>
 
 ---
