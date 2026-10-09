@@ -147,7 +147,8 @@ function sanitizeDnsBackup(servers, ownPort) {
 async function uciGet(option) {
   const r = await run('uci', ['-q', 'get', option]);
   if (!r.ok || !r.out) return null;
-  return r.out.split('\n').map((s) => s.trim()).filter(Boolean);
+  // uci 列表可能用换行分隔，也可能被拼成一行空格分隔，两种都要拆开
+  return r.out.split(/[\s\n]+/).map((s) => s.trim()).filter(Boolean);
 }
 
 async function uciCommit() {
