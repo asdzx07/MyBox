@@ -68,7 +68,7 @@ export function buildDirectIpRuleSet(settings) {
   const cidrs = new Set(PRIVATE_CIDRS);
   for (const p of settings.policies) {
     if (!p.enabled) continue;
-    const target = resolveTarget(p.target);
+    const target = resolveTarget(p.target, settings);
     if (target !== DIRECT_TAG && target !== BLOCK_TAG) continue;
     for (const c of p.ipCidr || []) cidrs.add(c);
   }
@@ -83,7 +83,7 @@ function directBypassRuleSets(settings) {
   const tags = new Set([DIRECT_IP_RULESET]);
   for (const p of settings.policies) {
     if (!p.enabled) continue;
-    const target = resolveTarget(p.target);
+    const target = resolveTarget(p.target, settings);
     if (target !== DIRECT_TAG && target !== BLOCK_TAG) continue;
     for (const tag of p.rulesets || []) {
       if (tag.startsWith('geoip-')) tags.add(tag);
@@ -92,11 +92,23 @@ function directBypassRuleSets(settings) {
   return [...tags];
 }
 
-/** 策略的 target 可能是内置标记，映射成真实出站 tag。 */
-function resolveTarget(target) {
+/**
+ * 把策略的 target 解析成真实的出站 tag。
+ *
+ * 三个来源都要认：
+ *   - 内置标记 builtin-direct / builtin-block
+ *   - 分组的 id（默认策略里存的是 id，改名不会失效）
+ *   - 分组的名称（老配置和面板手填的是名称）
+ *
+ * 这里踩过一次坑：默认策略写的是分组 id（all-auto），而出站是按分组名称
+ * （所有-自动）注册的，names.has(target) 为 false，于是所有应用策略被静默
+ * 跳过——表现就是「Google 打不开」但配置看起来一切正常。
+ */
+function resolveTarget(target, settings) {
   if (target === 'builtin-direct') return DIRECT_TAG;
   if (target === 'builtin-block') return BLOCK_TAG;
-  return target;
+  const group = settings.groups.find((g) => g.id === target || g.name === target);
+  return group ? group.name : target;
 }
 
 /* -------------------------------------------------------------- outbounds */
@@ -181,15 +193,26 @@ function buildOutbounds(settings) {
     tags.add(g.name);
   }
 
-  // 兜底 selector：route.final 指向它，默认走直连。
-  // 见 FALLBACK_TAG 的注释——不能让 final 直接指向空的 direct 出站。
-  const fallbackMembers = [DIRECT_TAG, BLOCK_TAG, ...settings.groups.filter((g) => g.enabled).map((g) => g.name)]
-    .filter((t, i, arr) => tags.has(t) && arr.indexOf(t) === i);
+  // 兜底 selector：route.final 指向它。
+  //
+  // 默认成员必须是「走代理」的组，不能是直连。原因：按裸 IP 发起的连接
+  // （App 硬编码 IP、客户端自带 DNS 拿到真实 IP、嗅探不出域名）没有任何
+  // 域名可以匹配策略，只能落到兜底。如果兜底是直连，这些连接就直连出去——
+  // 被墙的站点（Telegram、1.1.1.1 之类）必然超时。
+  // 国内流量由 geosite-cn / geoip-cn 策略拦下来走直连，不会受影响。
+  const enabledGroups = settings.groups.filter((g) => g.enabled).map((g) => g.name);
+  const proxyDefault = settings.groups.find((g) => g.enabled && g.type === 'urltest')?.name
+    || enabledGroups[0]
+    || DIRECT_TAG;
+
+  const fallbackMembers = [proxyDefault, ...enabledGroups, DIRECT_TAG, BLOCK_TAG]
+    .filter((t, i, arr) => arr.indexOf(t) === i && tags.has(t));
+
   outbounds.push({
     type: 'selector',
     tag: FALLBACK_TAG,
     outbounds: fallbackMembers.length ? fallbackMembers : [DIRECT_TAG],
-    default: DIRECT_TAG,
+    default: fallbackMembers.includes(proxyDefault) ? proxyDefault : fallbackMembers[0],
   });
   tags.add(FALLBACK_TAG);
 
@@ -260,7 +283,7 @@ function buildDns(settings, names) {
       if (p.domainSuffix?.length) conditions.push({ domain_suffix: [...p.domainSuffix] });
       if (!conditions.length) continue;
 
-      const target = resolveTarget(p.target);
+      const target = resolveTarget(p.target, settings);
       const isProxy = target !== DIRECT_TAG && target !== BLOCK_TAG;
       rules.push({
         type: 'logical',
@@ -274,7 +297,12 @@ function buildDns(settings, names) {
   return {
     servers,
     rules,
-    final: 'dns-direct',
+    // 兜底用代理 DNS，必须和 route.final（走代理）同边：路由兜底走代理、
+    // DNS 兜底却用国内 DNS 的话，没命中策略的域名会被解析成被污染的 IP。
+    //
+    // 注意不能用 FakeIP 当默认——sing-box 会直接 FATAL：
+    // "default server cannot be fakeip"。FakeIP 只能通过显式规则命中。
+    final: 'dns-proxy',
     strategy: network.ipv6 ? 'prefer_ipv4' : 'ipv4_only',
   };
 }
@@ -315,7 +343,7 @@ function buildRoute(settings, names) {
     const conditions = policyConditions(p);
     if (!conditions.length) continue;
 
-    const target = resolveTarget(p.target);
+    const target = resolveTarget(p.target, settings);
     if (!names.has(target)) continue;
 
     const switchRule = { rule_set: [flipTag(p.id)] };

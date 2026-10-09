@@ -7,7 +7,7 @@ import {
 } from './lib/paths.mjs';
 import { createLogger } from './lib/log.mjs';
 import { ensureDirs } from './lib/fsx.mjs';
-import { loadSettings, saveSettings, mutateSettings, newId } from './lib/settings.mjs';
+import { loadSettings, saveSettings, mutateSettings, newId, DEFAULT_POLICIES } from './lib/settings.mjs';
 import {
   isPasswordSet, setPassword, verifyPassword, issueToken, clearSessionCookie,
   setSessionCookie, authMiddleware, isAuthed,
@@ -244,12 +244,21 @@ app.put('/api/groups', (req, res) => {
 
 app.get('/api/policies', (req, res) => {
   const { policies, groups } = loadSettings({ force: true });
+
+  // 策略里存的是分组 id（改名不会失效），面板显示的是分组名称，这里对齐一下：
+  // 返回的 target 统一成 id，前端拿 label 显示。
+  const toId = (target) => {
+    if (target === 'builtin-direct' || target === 'builtin-block') return target;
+    const g = groups.find((x) => x.name === target || x.id === target);
+    return g ? g.id : target;
+  };
+
   res.json({
-    policies: policies.map((p) => ({ ...p, flipTag: flipTag(p.id) })),
+    policies: policies.map((p) => ({ ...p, target: toId(p.target), flipTag: flipTag(p.id) })),
     targets: [
       { value: 'builtin-direct', label: '直连' },
       { value: 'builtin-block', label: '拒绝' },
-      ...groups.filter((g) => g.enabled).map((g) => ({ value: g.name, label: g.name })),
+      ...groups.filter((g) => g.enabled).map((g) => ({ value: g.id, label: g.name })),
     ],
   });
 });
@@ -272,6 +281,20 @@ app.put('/api/policies', (req, res) => {
     s.policies = clean;
   });
   res.json({ ok: true, policies: clean });
+});
+
+/** 恢复默认策略。保留同名策略原来选的出口，其余用默认值。 */
+app.post('/api/policies/reset', (req, res) => {
+  const current = loadSettings({ force: true });
+  const targetByName = new Map(current.policies.map((p) => [p.name, p.target]));
+  const next = DEFAULT_POLICIES.map((p) => ({
+    ...p,
+    target: targetByName.get(p.name) ?? p.target,
+  }));
+  mutateSettings((s) => {
+    s.policies = next;
+  });
+  res.json({ ok: true, policies: next });
 });
 
 /** 单独切换一个策略的开关——只改那个小文件，不重新部署、不重启内核。 */

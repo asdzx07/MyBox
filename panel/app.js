@@ -562,6 +562,14 @@ function bindEvents() {
     renderPolicies();
   });
 
+  $('btnResetPolicies').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
+    if (!confirm('恢复成默认策略？你自己加的策略会被删掉（同名策略选的出口会保留）。')) return;
+    const r = await api('/policies/reset', { method: 'POST' });
+    state.policies = r.policies;
+    await loadPolicies();
+    toast('已恢复默认策略，记得「保存并部署」');
+  }));
+
   $('btnSaveSettings').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
     const patch = {
       network: {
