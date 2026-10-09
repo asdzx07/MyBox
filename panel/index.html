@@ -34,6 +34,7 @@
       <button data-tab="subscriptions">订阅</button>
       <button data-tab="groups">分组</button>
       <button data-tab="policies">策略</button>
+      <button data-tab="logs">日志</button>
       <button data-tab="settings">设置</button>
       <button data-tab="logout">退出</button>
     </nav>
@@ -59,11 +60,39 @@
           <div class="stat"><div class="k">已启用策略</div><div class="v" id="statPolicies">—</div></div>
         </div>
         <p class="note" id="overviewNote" style="margin-top:12px"></p>
-        <p class="err-text" id="overviewError"></p>
+        <p class="warn-text hidden" id="overviewHint"></p>
       </div>
 
+      <div class="two-col">
+        <div class="card">
+          <div class="card-head">
+            <h3>节点组</h3>
+            <div class="spacer"></div>
+            <button class="small" id="btnOverviewNodes">刷新</button>
+          </div>
+          <div id="overviewGroups"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h3>当前连接</h3>
+            <div class="spacer"></div>
+            <span class="note" id="overviewConnCount"></span>
+            <button class="small" id="btnOverviewConns">刷新</button>
+          </div>
+          <div id="overviewConns"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------------------------------------------------------- 日志 -->
+    <section class="page" id="page-logs">
+      <h2>日志</h2>
       <div class="card">
-        <div class="card-head"><h3>内核日志</h3><div class="spacer"></div>
+        <div class="card-head">
+          <h3>内核日志</h3>
+          <div class="spacer"></div>
+          <label class="inline note"><input type="checkbox" id="logAuto" style="width:auto"> 自动刷新</label>
           <button class="small" id="btnLog">刷新</button>
         </div>
         <pre class="log" id="kernelLog">—</pre>

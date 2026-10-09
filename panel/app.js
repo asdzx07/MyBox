@@ -271,18 +271,74 @@ async function loadOverview() {
     if (data.meta?.lastDeployAt) notes.push(`上次部署 ${new Date(data.meta.lastDeployAt).toLocaleString()}`);
     $('overviewNote').textContent = notes.join(' · ');
 
-    // 给出下一步该干什么，别让用户对着空白页猜
-    const hints = [];
-    if (!data.counts.nodes) hints.push('还没有节点：去「订阅」页添加订阅并刷新');
-    else if (!data.kernel.running) hints.push(`有 ${data.counts.nodes} 个节点但内核没在运行：去「设置」点「保存并部署」`);
-    if (data.kernel.running && data.counts.nodes) hints.push('想换线路去「节点」页，点分组里的成员即可切换');
-    $('overviewError').textContent = hints.length
-      ? hints.join('　·　')
-      : (data.meta?.lastDeployError ? `上次错误：${data.meta.lastDeployError}` : '');
-    await loadKernelLog();
+    // 只有真出问题时才提示，而且用琥珀色不用报错红——一切正常时这里必须空着，
+    // 否则用户会以为系统坏了（之前那句"想换线路去节点页"就长得很像报错）。
+    const problems = [];
+    if (data.meta?.lastDeployError) problems.push(`上次部署出错：${data.meta.lastDeployError}`);
+    if (!data.counts.nodes) problems.push('还没有节点，去「订阅」页添加订阅');
+    else if (!data.kernel.running) problems.push(`有 ${data.counts.nodes} 个节点但内核没在运行，去「设置」点「保存并部署」`);
+    const hint = $('overviewHint');
+    hint.textContent = problems.join('　·　');
+    hint.classList.toggle('hidden', problems.length === 0);
+
+    await Promise.all([loadOverviewGroups(), loadOverviewConns()]);
   } catch (err) {
     if (err.status === 401) return checkAuth();
     toast(err.message);
+  }
+}
+
+/** 概览页左侧：节点组，下拉即切换。 */
+async function loadOverviewGroups() {
+  const box = $('overviewGroups');
+  try {
+    const data = await api('/nodes/status');
+    state.nodeGroups = data.groups || [];
+    if (!state.nodeGroups.length) {
+      box.innerHTML = '<p class="mini-empty">内核没在运行，读不到节点组</p>';
+      return;
+    }
+    box.innerHTML = `<div class="mini">${state.nodeGroups.map((g) => {
+      const isSelector = g.type === 'Selector';
+      const options = (g.members || [])
+        .map((m) => `<option value="${escapeHtml(m)}"${m === g.now ? ' selected' : ''}>${escapeHtml(m)}</option>`)
+        .join('');
+      return `
+        <div class="mini-row">
+          <div class="grow">
+            <div class="name">${escapeHtml(g.name)}</div>
+            <div class="sub">${GROUP_LABEL[g.type] || g.type} · ${g.members.length} 个成员</div>
+          </div>
+          ${isSelector
+            ? `<select data-ov-group="${escapeHtml(g.name)}">${options}</select>`
+            : `<span class="tag">${escapeHtml(g.now || '测速中…')}</span>`}
+        </div>`;
+    }).join('')}</div>`;
+  } catch (err) {
+    box.innerHTML = `<p class="mini-empty">${escapeHtml(err.message)}</p>`;
+  }
+}
+
+/** 概览页右侧：当前连接。 */
+async function loadOverviewConns() {
+  const box = $('overviewConns');
+  try {
+    const data = await api('/nodes/connections');
+    $('overviewConnCount').textContent = data.total ? `${data.total} 条` : '';
+    if (!data.recent?.length) {
+      box.innerHTML = '<p class="mini-empty">当前没有活动连接</p>';
+      return;
+    }
+    box.innerHTML = `<div class="mini">${data.recent.slice(0, 14).map((c) => `
+      <div class="mini-row">
+        <div class="grow">
+          <div class="name">${escapeHtml(c.host || '(无域名)')}</div>
+          <div class="sub">${escapeHtml(c.chain.join(' → '))}${c.rule ? ` · ${escapeHtml(c.rule)}` : ''}</div>
+        </div>
+        <span class="tag muted">${escapeHtml(c.network || '')}</span>
+      </div>`).join('')}</div>`;
+  } catch (err) {
+    box.innerHTML = `<p class="mini-empty">${escapeHtml(err.message)}</p>`;
   }
 }
 
@@ -293,6 +349,20 @@ async function loadKernelLog() {
   } catch {
     /* 忽略 */
   }
+}
+
+let logTimer = null;
+const LOG_REFRESH_MS = 5000;
+
+/** 日志自动刷新：只在「日志」页可见且勾了自动时跑，离开就停，别白打请求。 */
+function scheduleLogAuto() {
+  clearInterval(logTimer);
+  logTimer = null;
+  if (!$('page-logs').classList.contains('active') || !$('logAuto').checked) return;
+  logTimer = setInterval(() => {
+    if ($('page-logs').classList.contains('active')) loadKernelLog();
+    else scheduleLogAuto();
+  }, LOG_REFRESH_MS);
 }
 
 async function loadSubscriptions() {
@@ -459,11 +529,13 @@ function bindEvents() {
       }
       document.querySelectorAll('nav.tabs button').forEach((b) => b.classList.toggle('active', b === btn));
       document.querySelectorAll('section.page').forEach((p) => p.classList.toggle('active', p.id === `page-${tab}`));
-      // 节点页的数据依赖内核在跑，进页面时现拉
+      // 节点页和日志页的数据依赖内核在跑，进页面时现拉
       if (tab === 'nodes') {
         await loadNodes();
         await loadConnections();
       }
+      if (tab === 'logs') await loadKernelLog();
+      scheduleLogAuto();
     });
   });
 
@@ -479,6 +551,18 @@ function bindEvents() {
     await loadOverview();
   }));
   $('btnLog').addEventListener('click', loadKernelLog);
+  $('logAuto').addEventListener('change', scheduleLogAuto);
+
+  // ---- 概览页的节点组 / 当前连接
+  $('btnOverviewNodes').addEventListener('click', (e) => withBusy(e.currentTarget, loadOverviewGroups));
+  $('btnOverviewConns').addEventListener('click', (e) => withBusy(e.currentTarget, loadOverviewConns));
+
+  $('overviewGroups').addEventListener('change', async (e) => {
+    const group = e.target.dataset.ovGroup;
+    if (!group) return;
+    await switchNode(group, e.target.value);
+    await loadOverviewGroups();
+  });
 
   // ---- 节点页
   $('btnReloadNodes').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {

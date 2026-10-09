@@ -126,6 +126,10 @@ h3 { font-size: 14px; font-weight: 600; margin: 0 0 10px; }
 
 .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 
+/* 概览页的左右两栏：窄屏自动堆成一列 */
+.two-col { display: grid; gap: 14px; grid-template-columns: 1fr 1fr; align-items: start; }
+@media (max-width: 760px) { .two-col { grid-template-columns: 1fr; } }
+
 .stat { background: var(--surface-2); border-radius: 8px; padding: 12px 14px; }
 .stat .k { color: var(--text-2); font-size: 12px; }
 .stat .v { font-size: 20px; font-weight: 600; margin-top: 2px; }
@@ -217,6 +221,33 @@ label.field > span { display: block; font-size: 12px; color: var(--text-2); marg
 .switch input:checked + span::after { transform: translateX(18px); }
 
 /* --------------------------------------------------------------- 提示 */
+
+/* 概览页的紧凑列表（节点组 / 当前连接） */
+.mini { display: flex; flex-direction: column; gap: 6px; }
+
+.mini-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  background: var(--surface-2);
+  border-radius: 7px;
+  font-size: 13px;
+}
+
+.mini-row .grow { flex: 1; min-width: 0; }
+.mini-row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mini-row .sub { color: var(--text-2); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.mini-row select {
+  width: auto;
+  max-width: 160px;
+  padding: 3px 6px;
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+
+.mini-empty { color: var(--text-2); font-size: 12px; padding: 8px 2px; }
 
 .toast {
   position: fixed;
