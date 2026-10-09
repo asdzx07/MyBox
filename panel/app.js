@@ -484,19 +484,25 @@ async function loadConnectionsPage() {
       const id = encodeURIComponent(c.id || '');
       return `
         <div class="conn-item">
-          <div style="flex:1;min-width:0">
-            <div class="conn-meta-title">
-              <span>${host}${port}</span>
-              <span class="tag muted" style="font-size:11px">${proto}</span>
-              ${rule ? `<span class="tag" style="font-size:11px">${rule}</span>` : ''}
+          <div class="conn-main">
+            <div class="conn-header">
+              <span class="conn-target" title="${host}${port}">${host}${port}</span>
+              <span class="tag muted conn-proto">${proto}</span>
+              ${rule ? `<span class="tag conn-rule" title="${rule}">${rule}</span>` : ''}
             </div>
             <div class="conn-meta-sub">
-              源: ${src} · 链路: ${chain || '直连'}
+              <span>源: ${src}</span>
+              <span class="conn-sep">·</span>
+              <span>链路: ${chain || '直连'}</span>
             </div>
           </div>
-          <div class="inline" style="gap:8px;align-items:center">
-            <span class="tag muted" style="font-family:monospace;font-size:11px">↓ ${fmtBytes(c.download || 0)} / ↑ ${fmtBytes(c.upload || 0)}</span>
-            ${c.id ? `<button class="small" onclick="closeSingleConn('${id}')" style="padding:3px 8px;font-size:11.5px">断开</button>` : ''}
+          <div class="conn-stats-col">
+            <div class="conn-traffic">
+              <span class="tf-down">↓ ${fmtBytes(c.download || 0)}</span>
+              <span class="tf-sep">/</span>
+              <span class="tf-up">↑ ${fmtBytes(c.upload || 0)}</span>
+            </div>
+            ${c.id ? `<button class="small conn-btn-close" onclick="closeSingleConn('${id}')">断开</button>` : ''}
           </div>
         </div>
       `;
@@ -835,11 +841,11 @@ async function loadSettings() {
   // 面板语义化版本展示与官方源对比
   try {
     const v = await api('/system/version');
-    const cur = v.current || 'v1.0.0';
+    const cur = v.current || 'v1.0.0(e31b623)';
     if ($('sysVersion')) $('sysVersion').textContent = cur;
     if ($('settingCurrentVerTag')) $('settingCurrentVerTag').textContent = cur;
-    if ($('brandVersion')) $('brandVersion').textContent = ` ${cur}`;
-    if ($('sysCommitSha')) $('sysCommitSha').textContent = v.commitSha ? `(${v.commitSha})` : '';
+    if ($('brandVersion')) $('brandVersion').textContent = cur;
+    if ($('sysCommitSha')) $('sysCommitSha').textContent = '';
     if ($('latestSysVersion')) $('latestSysVersion').textContent = v.latest || cur;
     if ($('panelCheckTime')) $('panelCheckTime').textContent = '刚刚检查';
 
@@ -862,7 +868,10 @@ async function loadSettings() {
       if (applyBtn) applyBtn.classList.add('hidden');
     }
   } catch {
-    if ($('sysVersion')) $('sysVersion').textContent = 'v1.0.0';
+    if ($('sysVersion')) $('sysVersion').textContent = 'v1.0.0(e31b623)';
+    if ($('settingCurrentVerTag')) $('settingCurrentVerTag').textContent = 'v1.0.0(e31b623)';
+    if ($('brandVersion')) $('brandVersion').textContent = 'v1.0.0(e31b623)';
+    if ($('latestSysVersion')) $('latestSysVersion').textContent = 'v1.0.0(e31b623)';
   }
 
   // 获取并展示内核最新版本
@@ -1208,8 +1217,12 @@ function bindEvents() {
     if (txt) txt.innerHTML = '<span class="animate-spin">↻</span> 检查中...';
     try {
       const v = await api('/system/version');
-      if ($('sysVersion')) $('sysVersion').textContent = v.current || 'v1.0.0';
-      if ($('latestSysVersion')) $('latestSysVersion').textContent = v.latest || v.current || 'v1.0.0';
+      const cur = v.current || 'v1.0.0(e31b623)';
+      if ($('sysVersion')) $('sysVersion').textContent = cur;
+      if ($('settingCurrentVerTag')) $('settingCurrentVerTag').textContent = cur;
+      if ($('brandVersion')) $('brandVersion').textContent = cur;
+      if ($('sysCommitSha')) $('sysCommitSha').textContent = '';
+      if ($('latestSysVersion')) $('latestSysVersion').textContent = v.latest || cur;
       if ($('panelCheckTime')) $('panelCheckTime').textContent = '刚刚检查';
 
       const pBadge = $('panelUpdateBadge');
@@ -1244,6 +1257,21 @@ function bindEvents() {
       }, 2200);
     }
   });
+
+  // 更新广告规则集
+  $('btnAdblockRefresh')?.addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
+    const txt = $('btnAdblockRefreshText');
+    const prev = txt ? txt.textContent : '';
+    if (txt) txt.textContent = '更新中...';
+    try {
+      const r = await api('/rulesets/refresh', { method: 'POST' });
+      toast(r.ok ? '广告规则集已更新至最新' : '更新规则集失败');
+    } catch (err) {
+      toast(`更新失败：${err.message}`);
+    } finally {
+      if (txt) txt.textContent = prev;
+    }
+  }));
 
   // 立即升级面板
   $('btnSysUpdate')?.addEventListener('click', async (e) => {

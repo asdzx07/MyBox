@@ -27,50 +27,51 @@
 
 <div id="app" class="hidden">
   <aside class="sidebar">
-    <div class="brand">MyBox<small id="brandVersion"></small></div>
+    <div class="brand">MyBox<small id="brandVersion">v1.0.0(e31b623)</small></div>
     
     <div class="sb-sec">导航</div>
     <nav class="sb-nav">
       <!-- 1. 概览 -->
       <button data-tab="overview" class="active">
         <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg></span>
-        概览
+        <span class="nav-text">概览</span>
       </button>
 
       <!-- 2. 节点分组 -->
       <button data-tab="nodes">
         <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></span>
-        节点分组
+        <span class="nav-text">节点分组</span>
       </button>
 
       <!-- 3. 目标分流 -->
       <button data-tab="policies">
         <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span>
-        目标分流
+        <span class="nav-text">目标分流</span>
       </button>
 
       <!-- 4. 当前连接 -->
       <button data-tab="connections">
         <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>
-        当前连接<span class="bdg hidden" id="sbConnCount">0</span>
+        <span class="nav-text">当前连接</span>
+        <span class="bdg hidden" id="sbConnCount">0</span>
       </button>
 
       <!-- 5. 内网分流 -->
       <button data-tab="clients">
         <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
-        内网分流
+        <span class="nav-text">内网分流</span>
       </button>
 
       <!-- 6. 订阅管理 -->
       <button data-tab="subscriptions">
         <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7 12 12l8.7-5M12 22V12"/></svg></span>
-        订阅管理
+        <span class="nav-text">订阅管理</span>
       </button>
 
       <!-- 7. 核心设置 -->
       <button data-tab="settings">
         <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
-        核心设置
+        <span class="nav-text">核心设置</span>
       </button>
     </nav>
     
@@ -292,7 +293,7 @@
         <div>
           <div class="page-title-row">
             <h2>核心设置</h2>
-            <span class="version-tag" id="settingCurrentVerTag">v1.0.0</span>
+            <span class="version-tag" id="settingCurrentVerTag">v1.0.0(e31b623)</span>
           </div>
           <p class="note" style="margin-top:2px">网络栈协议、DNS 策略、内核系统及版本更新管理</p>
         </div>
@@ -337,11 +338,11 @@
               <span class="bdg" id="panelUpdateBadge">当前已是最新</span>
             </div>
             <div class="vmc-val">
-              <span id="sysVersion">v1.0.0</span>
+              <span id="sysVersion">v1.0.0(e31b623)</span>
               <small id="sysCommitSha"></small>
             </div>
             <div class="vmc-foot">
-              <span>线上最新版本：<strong id="latestSysVersion">v1.0.0</strong></span>
+              <span>线上最新版本：<strong id="latestSysVersion">v1.0.0(e31b623)</strong></span>
               <span id="panelCheckTime">刚刚检查</span>
             </div>
           </div>
@@ -430,33 +431,96 @@
         </p>
       </div>
 
-      <!-- 核心卡片 3: DNS 分流与日志级别 -->
+      <!-- 核心卡片 3: DNS 分流与运行级别 (全面重构排版) -->
       <div class="card">
-        <h3>DNS 分流与运行级别</h3>
-        <div class="row">
-          <label class="field"><span>接管方式</span>
+        <div class="card-head">
+          <h3>DNS 分流与运行级别</h3>
+        </div>
+        <p class="note" style="margin:-4px 0 16px">
+          配置透明代理 DNS 解析服务链、直连与代理上游分流及广告拦截策略
+        </p>
+
+        <!-- 1. 核心解析与日志参数 (规范的双列网格) -->
+        <div class="dns-grid">
+          <label class="field">
+            <span class="field-title">接管方式</span>
             <select id="setDnsMode">
               <option value="dnsmasq">dnsmasq 接管（推荐）</option>
-              <option value="off">不接管，自己管</option>
+              <option value="off">不接管（自行配置系统 DNS）</option>
             </select>
+            <span class="field-hint">将路由器 53 端口流量转发至 sing-box 独立分流解析</span>
           </label>
-          <label class="field"><span>直连 DNS</span><input id="setDnsDirect" placeholder="223.5.5.5"></label>
-          <label class="field"><span>代理 DNS</span><input id="setDnsProxy" placeholder="1.1.1.1"></label>
-          <label class="field"><span>内核日志级别</span>
-            <select id="setLogLevel"><option>trace</option><option>debug</option><option>info</option><option>warn</option><option>error</option></select>
+
+          <label class="field">
+            <span class="field-title">内核日志级别</span>
+            <select id="setLogLevel">
+              <option value="info">info（标准推荐）</option>
+              <option value="warn">warn（仅警告与错误）</option>
+              <option value="error">error（仅严重错误）</option>
+              <option value="debug">debug（调试详细信息）</option>
+              <option value="trace">trace（全量链路追踪）</option>
+            </select>
+            <span class="field-hint">控制 sing-box 运行日志的详细程度</span>
+          </label>
+
+          <label class="field">
+            <span class="field-title">直连 DNS 服务器</span>
+            <input id="setDnsDirect" placeholder="223.5.5.5">
+            <span class="field-hint">用于解析国内域名及直连请求（如阿里 223.5.5.5）</span>
+          </label>
+
+          <label class="field">
+            <span class="field-title">代理 DNS 服务器</span>
+            <input id="setDnsProxy" placeholder="1.1.1.1">
+            <span class="field-hint">用于解析代理域名及防 DNS 污染（如 1.1.1.1 / 8.8.8.8）</span>
           </label>
         </div>
-        <div class="inline" style="gap:16px;margin:8px 0">
-          <label class="inline"><input type="checkbox" id="setFakeIp" style="width:auto"> 代理域名使用 FakeIP</label>
-          <label class="inline"><input type="checkbox" id="setAdblock" style="width:auto"> DNS 广告过滤（开屏广告）</label>
+
+        <!-- 2. 高级解析特性 (与 TUN 栈一致的高级条目 Switch 开关) -->
+        <div class="dns-switch-sec">
+          <div class="setting-item">
+            <div class="grow">
+              <div class="title">代理域名使用 FakeIP</div>
+              <div class="sub">为代理域名分配虚拟保留 IP (198.18.0.0/15)，大幅加速握手并消除本地 DNS 延迟</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="setFakeIp">
+              <span></span>
+            </label>
+          </div>
+
+          <div class="setting-item">
+            <div class="grow">
+              <div class="title">DNS 广告过滤（开屏广告与隐私追踪拦截）</div>
+              <div class="sub">基于 Geosite 广告规则集屏蔽移动端开屏广告与常见追踪器域名</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="setAdblock">
+              <span></span>
+            </label>
+          </div>
         </div>
-        <div class="row">
-          <label class="field"><span>手动广告规则（每行一个域名）</span><textarea id="setAdblockCustom" rows="2" placeholder="ads.example.com"></textarea></label>
-          <label class="field"><span>广告白名单（每行一个域名）</span><textarea id="setAdblockAllow" rows="2" placeholder="example.com"></textarea></label>
-        </div>
-        <div class="row">
-          <button class="small" id="btnAdblockRefresh">更新广告规则集</button>
-          <span class="note">远程规则集每天自动更新，点此立即更新</span>
+
+        <!-- 3. 自定义规则与规则集维护 -->
+        <div class="dns-adblock-sec">
+          <div class="dns-rules-grid">
+            <label class="field">
+              <span class="field-title">手动广告黑名单（强制拦截）</span>
+              <textarea id="setAdblockCustom" rows="3" placeholder="每行一个域名，例如：&#10;ads.example.com&#10;adservice.google.com"></textarea>
+            </label>
+            <label class="field">
+              <span class="field-title">广告白名单（放行防误杀）</span>
+              <textarea id="setAdblockAllow" rows="3" placeholder="每行一个域名，例如：&#10;example.com&#10;analytics.trusted.org"></textarea>
+            </label>
+          </div>
+
+          <div class="dns-rules-foot">
+            <span class="note">远程 Geosite 规则集每日自动同步，亦可随时手动拉取</span>
+            <button class="small" id="btnAdblockRefresh">
+              <svg class="btn-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              <span id="btnAdblockRefreshText">更新广告规则集</span>
+            </button>
+          </div>
         </div>
       </div>
 

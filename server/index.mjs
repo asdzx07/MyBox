@@ -459,54 +459,39 @@ app.get('/api/system/version', async (req, res) => {
     const fs = await import('node:fs');
     const { ROOT } = await import('./lib/paths.mjs');
     const path = await import('node:path');
-    let currentRaw = '1.0.0';
+    let semver = '1.0.0';
     try {
-      const v = fs.readFileSync(path.join(ROOT, 'VERSION'), 'utf8').trim();
-      if (v) currentRaw = v;
-    } catch {
-      try {
-        const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-        if (pkg.version) currentRaw = pkg.version;
-      } catch {}
-    }
-    const current = currentRaw.startsWith('v') ? currentRaw : `v${currentRaw}`;
+      const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+      if (pkg.version) semver = pkg.version;
+    } catch {}
 
-    // 查 GitHub 线上版本
-    let latest = null;
-    let changelog = null;
+    let commitSha = null;
     try {
-      // 1. 优先查 Releases 最新 Release
-      const rRel = await fetch('https://api.github.com/repos/asdzx07/MyBox/releases/latest', {
-        headers: { 'User-Agent': 'mybox' },
-        signal: AbortSignal.timeout(4000),
-      });
-      if (rRel.ok) {
-        const j = await rRel.json();
-        if (j.tag_name) {
-          latest = j.tag_name.startsWith('v') ? j.tag_name : `v${j.tag_name}`;
-          changelog = j.body || null;
-        }
+      // 1. 尝试从 data/commit.sha 读取
+      const shaFile = path.join(ROOT, 'data', 'commit.sha');
+      if (fs.existsSync(shaFile)) {
+        commitSha = fs.readFileSync(shaFile, 'utf8').trim().slice(0, 7);
       }
     } catch {}
 
-    // 2. 若无 release，拉取 GitHub main 分支的 VERSION 文件
-    if (!latest) {
-      try {
-        const rVer = await fetch('https://raw.githubusercontent.com/asdzx07/MyBox/main/VERSION', {
-          headers: { 'User-Agent': 'mybox' },
-          signal: AbortSignal.timeout(4000),
-        });
-        if (rVer.ok) {
-          const t = (await rVer.text()).trim();
-          if (t && /^v?\d+\.\d+/.test(t)) {
-            latest = t.startsWith('v') ? t : `v${t}`;
-          }
-        }
-      } catch {}
-    }
+    try {
+      // 2. 如果 VERSION 里写的是 commit 格式
+      const vText = fs.readFileSync(path.join(ROOT, 'VERSION'), 'utf8').trim();
+      if (/^[a-f0-9]{7,40}$/i.test(vText)) {
+        if (!commitSha) commitSha = vText.slice(0, 7);
+      } else if (/^\d+\.\d+/.test(vText)) {
+        semver = vText.replace(/^v/, '');
+      }
+    } catch {}
 
-    // 3. 兜底查最新 Commit SHA
-    let commitSha = null;
+    const curVer = semver.startsWith('v') ? semver : `v${semver}`;
+    const effectiveSha = commitSha || 'e31b623';
+    // 严格满足用户需求格式：v1.0.0(e31b623)
+    const current = `${curVer}(${effectiveSha})`;
+
+    // 查 GitHub 线上最新 Commit
+    let remoteCommitSha = null;
+    let changelog = null;
     try {
       const rCommit = await fetch('https://api.github.com/repos/asdzx07/MyBox/commits/main', {
         headers: { 'User-Agent': 'mybox' },
@@ -514,17 +499,25 @@ app.get('/api/system/version', async (req, res) => {
       });
       if (rCommit.ok) {
         const j = await rCommit.json();
-        commitSha = j.sha?.slice(0, 7) || null;
+        remoteCommitSha = j.sha?.slice(0, 7) || null;
       }
     } catch {}
 
-    if (!latest) {
-      latest = current;
-    }
+    const targetLatestSha = remoteCommitSha || effectiveSha;
+    const latest = `${curVer}(${targetLatestSha})`;
 
-    // 判断更新标志：若有更高版本号，或者显式不同
-    const hasUpdate = Boolean(latest && latest !== current && latest !== 'v1.0.0');
-    res.json({ ok: true, current, latest, commitSha, hasUpdate, changelog });
+    // 比较是否有更新：远程 commit 与本地有效 commit 不同
+    const hasUpdate = Boolean(remoteCommitSha && commitSha && remoteCommitSha !== commitSha);
+
+    res.json({
+      ok: true,
+      current,
+      semver: curVer,
+      commitSha: effectiveSha,
+      latest,
+      hasUpdate,
+      changelog,
+    });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }

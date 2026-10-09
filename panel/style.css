@@ -223,8 +223,15 @@ nav.sb-nav button.active {
 }
 nav.sb-nav button.active .ic { opacity: 1; color: var(--accent); }
 
+nav.sb-nav button .nav-text {
+  flex: 1;
+  text-align: left;
+  white-space: nowrap;
+}
+
 nav.sb-nav button .bdg {
   margin-left: auto;
+  flex: 0 0 auto;
   background: var(--accent);
   color: #fff;
   font-size: 11px;
@@ -872,15 +879,15 @@ button.btn-warn {
   border-top: 1px solid var(--border);
 }
 
-/* 当前连接列表单条项增强 */
+/* 当前连接列表单条项增强 (严格列对齐) */
 .conn-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
+  padding: 11px 16px;
   border-bottom: 1px solid var(--border);
-  gap: 12px;
-  transition: background .15s;
+  gap: 16px;
+  transition: background .15s ease;
 }
 .conn-item:last-child {
   border-bottom: none;
@@ -888,16 +895,178 @@ button.btn-warn {
 .conn-item:hover {
   background: var(--surface-2);
 }
-.conn-meta-title {
-  font-weight: 600;
-  font-size: 13.5px;
-  word-break: break-all;
+.conn-main {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+.conn-header {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  min-width: 0;
+}
+.conn-target {
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+  flex-shrink: 0;
+}
+.conn-proto {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.conn-rule {
+  font-size: 11px;
+  color: var(--text-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px;
+  flex: 0 1 auto;
 }
 .conn-meta-sub {
   font-size: 12px;
   color: var(--text-2);
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.conn-sep {
+  opacity: 0.4;
+}
+.conn-stats-col {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.conn-traffic {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  font-size: 11.5px;
+  color: var(--text-2);
+  background: var(--surface-2);
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+  min-width: 168px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+}
+.conn-traffic .tf-down {
+  color: var(--ok);
+}
+.conn-traffic .tf-up {
+  color: var(--accent);
+}
+.conn-traffic .tf-sep {
+  opacity: 0.4;
+}
+.conn-btn-close {
+  min-width: 48px;
+  padding: 3px 8px;
+  font-size: 11.5px;
+  flex-shrink: 0;
+}
+
+/* DNS 分流与运行级别卡片全新排版 */
+.dns-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px 18px;
+  margin-bottom: 16px;
+}
+.dns-grid .field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+}
+.dns-grid .field-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.dns-grid .field-hint {
+  font-size: 11.5px;
+  color: var(--text-3);
   margin-top: 2px;
+}
+.dns-switch-sec {
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 4px 0;
+  margin: 16px 0;
+}
+.dns-adblock-sec {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.dns-rules-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+.dns-rules-grid .field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+.dns-rules-grid .field-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.dns-rules-grid textarea {
+  resize: vertical;
+  min-height: 64px;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 8px 10px;
+}
+.dns-rules-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border);
+}
+@media (max-width: 768px) {
+  .dns-grid,
+  .dns-rules-grid {
+    grid-template-columns: 1fr;
+  }
+  .conn-target {
+    max-width: 180px;
+  }
+  .conn-rule {
+    max-width: 140px;
+  }
 }

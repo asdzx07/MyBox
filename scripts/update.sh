@@ -68,9 +68,13 @@ for d in server panel system tools scripts; do
 done
 cp "$SRCDIR/package.json" "$ROOT/"
 
-# 记录版本号（GitHub 最新 commit 短 hash）
+# 保留语义化版本号（如 1.0.0）
+[ -f "$SRCDIR/VERSION" ] && cp "$SRCDIR/VERSION" "$ROOT/VERSION" || echo "1.0.0" > "$ROOT/VERSION"
+
+# 记录当前 Commit 短 hash 至 data/commit.sha
+mkdir -p "$ROOT/data"
 COMMIT=$(curl -fsSL "https://api.github.com/repos/$REPO/commits/$BRANCH" 2>/dev/null | grep -o '"sha": "[a-f0-9]*"' | head -1 | cut -d'"' -f4 | cut -c1-7)
-[ -n "$COMMIT" ] && echo "$COMMIT" > "$ROOT/VERSION" || echo "unknown" > "$ROOT/VERSION"
+[ -n "$COMMIT" ] && echo "$COMMIT" > "$ROOT/data/commit.sha"
 
 say "更新依赖"
 cd "$ROOT"
