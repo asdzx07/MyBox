@@ -89,6 +89,29 @@ function resolveTarget(target) {
 
 /* -------------------------------------------------------------- outbounds */
 
+/**
+ * 递归去掉 undefined 和内部字段（`__` 开头的）。
+ *
+ * 节点对象上带着面板自己的元数据（比如 `__subscriptionId` 标记它属于哪条订阅），
+ * 直接写进配置会被内核以 unknown field 拒绝整份配置，所以生成前必须剥掉。
+ */
+function clean(value) {
+  if (Array.isArray(value)) return value.map(clean).filter((v) => v !== undefined);
+  if (value && typeof value === 'object') {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (v === undefined || k.startsWith('__')) continue;
+      const cv = clean(v);
+      if (cv === undefined) continue;
+      if (Array.isArray(cv) && cv.length === 0) continue;
+      if (cv && typeof cv === 'object' && !Array.isArray(cv) && Object.keys(cv).length === 0) continue;
+      out[k] = cv;
+    }
+    return out;
+  }
+  return value;
+}
+
 function buildOutbounds(settings) {
   const outbounds = [];
   const tags = new Set();
@@ -96,7 +119,7 @@ function buildOutbounds(settings) {
   for (const n of settings.nodes) {
     if (!n?.tag || tags.has(n.tag)) continue;
     tags.add(n.tag);
-    outbounds.push(n);
+    outbounds.push(clean(n));
   }
 
   for (const b of BUILTIN_OUTBOUNDS) {
@@ -407,5 +430,6 @@ export function generateConfig(settings) {
     },
   };
 
-  return { config, warnings, bypassSets };
+  // 最后整体过一遍 clean()，兜住任何漏网的内部字段
+  return { config: clean(config), warnings, bypassSets };
 }

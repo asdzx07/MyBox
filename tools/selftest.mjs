@@ -61,7 +61,9 @@ for (const dir of ['etc', 'data']) {
 ensureDirs();
 
 mutateSettings((s) => {
-  s.nodes = SAMPLE_NODES;
+  // 故意带上 __subscriptionId：这是面板的内部标记，绝不能被写进内核配置
+  // （sing-box 会以 unknown field 拒绝整份配置）。这是踩过的坑，留作回归。
+  s.nodes = SAMPLE_NODES.map((n) => ({ ...n, __subscriptionId: 'sub-sample' }));
   s.subscriptions = [{ id: 'sub-sample', name: '样例订阅', url: 'https://example.com/sub', enabled: true, nodeCount: SAMPLE_NODES.length }];
   s.groups[0].members = SAMPLE_NODES.map((n) => n.tag);
 });

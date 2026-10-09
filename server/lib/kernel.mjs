@@ -109,13 +109,19 @@ export async function installKernel(version, { onProgress = () => {} } = {}) {
 
 /* ------------------------------------------------------------ 配置校验 */
 
+/** sing-box 的错误输出带 ANSI 颜色码，去掉再返回，前端好显示。 */
+function stripAnsi(text) {
+  // eslint-disable-next-line no-control-regex
+  return String(text).replace(/\u001b\[[0-9;]*m/g, '');
+}
+
 export async function checkConfig(configPath = CONFIG_PATH) {
   if (!installed()) return { ok: false, error: '内核未安装' };
   try {
-    const { stderr } = await execFileAsync(SINGBOX_BIN, ['check', '-c', configPath], { timeout: 30000 });
-    return { ok: true, output: (stderr || '').trim() };
+    const { stderr } = await execFileAsync(SINGBOX_BIN, ['check', '-c', configPath], { timeout: 60000 });
+    return { ok: true, output: stripAnsi(stderr || '').trim() };
   } catch (err) {
-    const detail = [err.stdout, err.stderr].filter(Boolean).join('\n').trim() || err.message;
+    const detail = stripAnsi([err.stdout, err.stderr].filter(Boolean).join('\n').trim() || err.message);
     return { ok: false, error: detail };
   }
 }
