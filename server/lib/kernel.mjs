@@ -50,12 +50,22 @@ function archSuffix() {
   return `linux-${a}-${libc}`;
 }
 
-export async function fetchLatestVersion() {
-  const url = `https://api.github.com/repos/${REPO}/releases/latest`;
+export async function fetchLatestVersion({ includePrerelease = false } = {}) {
+  if (!includePrerelease) {
+    const url = `https://api.github.com/repos/${REPO}/releases/latest`;
+    const res = await fetch(url, { headers: { 'User-Agent': 'mybox' } });
+    if (!res.ok) throw new Error(`查询最新版本失败：HTTP ${res.status}`);
+    const json = await res.json();
+    return { version: json.tag_name, publishedAt: json.published_at };
+  }
+  // 取最新的 1.15 预发布版
+  const url = `https://api.github.com/repos/${REPO}/releases?per_page=20`;
   const res = await fetch(url, { headers: { 'User-Agent': 'mybox' } });
-  if (!res.ok) throw new Error(`查询最新版本失败：HTTP ${res.status}`);
-  const json = await res.json();
-  return { version: json.tag_name, publishedAt: json.published_at };
+  if (!res.ok) throw new Error(`查询版本列表失败：HTTP ${res.status}`);
+  const list = await res.json();
+  const hit = list.find((r) => /^v1\.15\./.test(r.tag_name));
+  if (!hit) throw new Error('没找到 1.15 版本');
+  return { version: hit.tag_name, publishedAt: hit.published_at, prerelease: true };
 }
 
 function assetName(version, suffix) {

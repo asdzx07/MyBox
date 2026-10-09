@@ -26,19 +26,30 @@
 </div>
 
 <div id="app" class="hidden">
-  <header class="topbar">
+  <aside class="sidebar">
     <div class="brand">MyBox<small id="brandVersion"></small></div>
-    <nav class="tabs">
-      <button data-tab="overview" class="active">概览</button>
-      <button data-tab="nodes">节点</button>
-      <button data-tab="subscriptions">订阅</button>
-      <button data-tab="groups">分组</button>
-      <button data-tab="policies">策略</button>
-      <button data-tab="logs">日志</button>
-      <button data-tab="settings">设置</button>
-      <button data-tab="logout">退出</button>
+    <div class="sb-sec">管理</div>
+    <nav class="sb-nav">
+      <button data-tab="overview" class="active"><span class="ic">📊</span>概览</button>
+      <button data-tab="nodes"><span class="ic">🌐</span>节点</button>
     </nav>
-  </header>
+    <div class="sb-sec">订阅</div>
+    <nav class="sb-nav">
+      <button data-tab="subscriptions"><span class="ic">📦</span>订阅管理</button>
+      <div id="sbSubGroups"></div>
+      <button data-tab="connections"><span class="ic">🔗</span>当前连接<span class="bdg hidden" id="sbConnCount">0</span></button>
+    </nav>
+    <div class="sb-sec">配置</div>
+    <nav class="sb-nav">
+      <button data-tab="groups"><span class="ic">🗂️</span>分组</button>
+      <button data-tab="policies"><span class="ic">🎯</span>策略</button>
+      <button data-tab="logs"><span class="ic">📝</span>日志</button>
+      <button data-tab="settings"><span class="ic">⚙️</span>设置</button>
+    </nav>
+    <div class="sb-foot">
+      <button data-tab="logout" class="ghost"><span class="ic">🚪</span>退出</button>
+    </div>
+  </aside>
 
   <main>
     <!-- ---------------------------------------------------------- 概览 -->
@@ -63,25 +74,27 @@
         <p class="warn-text hidden" id="overviewHint"></p>
       </div>
 
-      <div class="two-col">
-        <div class="card">
-          <div class="card-head">
-            <h3>节点组</h3>
-            <div class="spacer"></div>
-            <button class="small" id="btnOverviewNodes">刷新</button>
-          </div>
-          <div id="overviewGroups"></div>
+      <div class="card">
+        <div class="card-head">
+          <h3>节点组</h3>
+          <div class="spacer"></div>
+          <button class="small" id="btnOverviewNodes">刷新</button>
         </div>
+        <div id="overviewGroups"></div>
+      </div>
+    </section>
 
-        <div class="card">
-          <div class="card-head">
-            <h3>当前连接</h3>
-            <div class="spacer"></div>
-            <span class="note" id="overviewConnCount"></span>
-            <button class="small" id="btnOverviewConns">刷新</button>
-          </div>
-          <div id="overviewConns"></div>
+    <!-- ---------------------------------------------------------- 当前连接 -->
+    <section class="page" id="page-connections">
+      <h2>当前连接</h2>
+      <div class="card">
+        <div class="card-head">
+          <h3>活动连接</h3>
+          <div class="spacer"></div>
+          <span class="note" id="connPageCount"></span>
+          <button class="small" id="btnConnsRefresh">刷新</button>
         </div>
+        <div id="connsList"></div>
       </div>
     </section>
 
@@ -152,6 +165,9 @@
     <section class="page" id="page-groups">
       <h2>节点分组</h2>
       <p class="note" style="margin:-6px 0 14px">「自动择优」组按延迟选最快节点；「手动选择」组自己挑。动态组会按关键词自动收编新节点。</p>
+      <div class="card">
+        <button class="primary" id="btnAddGroup">＋ 新建分组</button>
+      </div>
       <div id="groupList"></div>
       <div class="card"><button class="primary" id="btnSaveGroups">保存分组</button></div>
     </section>

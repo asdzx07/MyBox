@@ -266,7 +266,7 @@ async function loadOverview() {
     hint.textContent = problems.join('　·　');
     hint.classList.toggle('hidden', problems.length === 0);
 
-    await Promise.all([loadOverviewGroups(), loadOverviewConns()]);
+    await Promise.all([loadOverviewGroups(), updateConnBadge()]);
   } catch (err) {
     if (err.status === 401) return checkAuth();
     toast(err.message);
@@ -304,17 +304,21 @@ async function loadOverviewGroups() {
   }
 }
 
-/** 概览页右侧：当前连接。 */
-async function loadOverviewConns() {
-  const box = $('overviewConns');
+/** 连接页面：当前连接。 */
+async function loadConnectionsPage() {
+  const box = $('connsList');
   try {
     const data = await api('/nodes/connections');
-    $('overviewConnCount').textContent = data.total ? `${data.total} 条` : '';
+    const n = data.total || 0;
+    $('connPageCount').textContent = n ? `${n} 条` : '';
+    const badge = $('sbConnCount');
+    badge.textContent = n;
+    badge.classList.toggle('hidden', !n);
     if (!data.recent?.length) {
       box.innerHTML = '<p class="mini-empty">当前没有活动连接</p>';
       return;
     }
-    box.innerHTML = `<div class="mini">${data.recent.slice(0, 14).map((c) => `
+    box.innerHTML = `<div class="mini">${data.recent.map((c) => `
       <div class="mini-row">
         <div class="grow">
           <div class="name">${escapeHtml(c.host || '(无域名)')}</div>
@@ -325,6 +329,36 @@ async function loadOverviewConns() {
   } catch (err) {
     box.innerHTML = `<p class="mini-empty">${escapeHtml(err.message)}</p>`;
   }
+}
+
+/** 仅更新侧边栏连接数徽标（概览页用）。 */
+async function updateConnBadge() {
+  try {
+    const data = await api('/nodes/connections');
+    const n = data.total || 0;
+    const badge = $('sbConnCount');
+    badge.textContent = n;
+    badge.classList.toggle('hidden', !n);
+  } catch { /* 忽略 */ }
+}
+
+/** 侧边栏订阅组列表。 */
+async function loadSbSubGroups() {
+  const box = $('sbSubGroups');
+  try {
+    const subs = await api('/subscriptions');
+    box.innerHTML = (subs || []).map((s) => `
+      <button data-sub="${escapeHtml(s.id)}"><span class="ic">📄</span>${escapeHtml(s.name || s.id)}</button>
+    `).join('');
+    box.querySelectorAll('button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('aside.sidebar button[data-tab]').forEach((b) => b.classList.remove('active'));
+        document.querySelector('aside.sidebar button[data-tab="subscriptions"]').classList.add('active');
+        document.querySelectorAll('section.page').forEach((p) => p.classList.toggle('active', p.id === 'page-subscriptions'));
+        loadSubscriptions();
+      });
+    });
+  } catch { box.innerHTML = ''; }
 }
 
 async function loadKernelLog() {
@@ -381,6 +415,8 @@ async function loadSubscriptions() {
   $('subSwitchNote').textContent = off
     ? `有 ${off} 条订阅已停用，它的节点不会进配置（改完记得「保存并部署」）。`
     : '开关控制这条订阅的节点是否进配置。停用后要「保存并部署」才生效。';
+  // 同步侧边栏订阅组
+  loadSbSubGroups();
 }
 
 async function loadGroups() {
@@ -518,7 +554,7 @@ function bindEvents() {
   $('gatePassword').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitGate(); });
   $('gateConfirm').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitGate(); });
 
-  document.querySelectorAll('nav.tabs button').forEach((btn) => {
+  document.querySelectorAll('aside.sidebar nav.sb-nav button, .sb-foot button').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const tab = btn.dataset.tab;
       if (tab === 'logout') {
@@ -526,11 +562,13 @@ function bindEvents() {
         location.reload();
         return;
       }
-      document.querySelectorAll('nav.tabs button').forEach((b) => b.classList.toggle('active', b === btn));
+      document.querySelectorAll('aside.sidebar button[data-tab]').forEach((b) => b.classList.toggle('active', b === btn));
       document.querySelectorAll('section.page').forEach((p) => p.classList.toggle('active', p.id === `page-${tab}`));
       // 节点页的数据依赖内核在跑，进页面时现拉
       if (tab === 'nodes') await loadNodes();
       if (tab === 'logs') await loadKernelLog();
+      if (tab === 'connections') await loadConnectionsPage();
+      if (tab === 'subscriptions') await loadSubscriptions();
       scheduleLogAuto();
     });
   });
@@ -551,7 +589,7 @@ function bindEvents() {
 
   // ---- 概览页的节点组 / 当前连接
   $('btnOverviewNodes').addEventListener('click', (e) => withBusy(e.currentTarget, loadOverviewGroups));
-  $('btnOverviewConns').addEventListener('click', (e) => withBusy(e.currentTarget, loadOverviewConns));
+  $('btnConnsRefresh').addEventListener('click', (e) => withBusy(e.currentTarget, loadConnectionsPage));
 
   $('overviewGroups').addEventListener('change', async (e) => {
     const group = e.target.dataset.ovGroup;
@@ -654,6 +692,17 @@ function bindEvents() {
       await api(`/subscriptions/${removeId}`, { method: 'DELETE' });
       await Promise.all([loadSubscriptions(), loadOverview()]);
     }
+  });
+
+  $('btnAddGroup').addEventListener('click', () => {
+    state.groups.push({
+      id: 'g' + Date.now().toString(36),
+      name: '新分组',
+      mode: 'manual',
+      members: [],
+    });
+    renderGroups();
+    toast('已添加，编辑后点「保存分组」');
   });
 
   $('btnSaveGroups').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {

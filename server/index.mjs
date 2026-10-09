@@ -385,7 +385,9 @@ app.get('/api/kernel/log', (req, res) => {
 
 app.get('/api/kernel/latest', async (req, res) => {
   try {
-    res.json(await kernel.fetchLatestVersion());
+    // 默认取 1.15 预发布版（用户指定）
+    const includePrerelease = req.query.stable !== '1';
+    res.json(await kernel.fetchLatestVersion({ includePrerelease }));
   } catch (err) {
     res.status(502).json({ error: err.message });
   }
