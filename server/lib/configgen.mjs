@@ -418,8 +418,9 @@ function buildRoute(settings, names) {
         format: 'binary',
         url,
         update_interval: '24h',
-        // 不写 download_detour：1.14 起已弃用（会打 WARN），默认走兜底出站，
-        // 而兜底是代理——从国内拉 GitHub 上的规则集走代理反而更稳。
+        // 1.15 起必须显式指定 download_detour，否则 FATAL 退出。
+        // 用兜底（代理）下载：从国内拉 GitHub 规则集走代理更稳。
+        download_detour: names.has(FALLBACK_TAG) ? FALLBACK_TAG : DIRECT_TAG,
       });
     }
   }
