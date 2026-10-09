@@ -131,10 +131,10 @@ async function loadNodes() {
 function delayBadge(name) {
   const entry = state.latency[name];
   if (!entry) return '';
-  if (entry.pending) return '<span class="tag muted">测速中…</span>';
-  if (entry.delay === null || entry.delay === undefined) return '<span class="tag err">超时</span>';
-  const cls = entry.delay < 200 ? 'ok' : 'muted';
-  return `<span class="tag ${cls}">${entry.delay} ms</span>`;
+  if (entry.pending) return '<span class="lat na">测速中…</span>';
+  if (entry.delay === null || entry.delay === undefined) return '<span class="lat bad">超时</span>';
+  const cls = entry.delay < 200 ? 'good' : entry.delay < 500 ? 'mid' : 'bad';
+  return `<span class="lat ${cls}">${entry.delay} ms</span>`;
 }
 
 function renderNodeGroups() {

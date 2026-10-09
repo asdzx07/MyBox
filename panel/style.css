@@ -248,14 +248,46 @@ label.field > span { display: block; font-size: 12px; color: var(--text-2); marg
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 12px;
+  padding: 11px 14px;
   background: var(--surface-2);
-  border-radius: 8px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  transition: border-color .15s, transform .1s, background .15s;
 }
-
+.item:hover {
+  border-color: var(--border);
+  background: var(--surface);
+}
+.item.active {
+  border-color: var(--accent);
+  background: var(--accent-weak);
+}
 .item .grow { flex: 1; min-width: 0; }
-.item .title { font-weight: 500; }
-.item .sub { color: var(--text-2); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item .title { font-weight: 600; font-size: 13.5px; }
+.item .sub { color: var(--text-2); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
+
+/* 延迟徽标：按数值着色 */
+.lat {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.lat.good { background: rgba(21,128,61,.12); color: var(--ok); }
+.lat.mid { background: rgba(180,83,9,.12); color: var(--warn); }
+.lat.bad { background: rgba(185,28,28,.12); color: var(--err); }
+.lat.na { background: var(--surface); color: var(--text-2); border: 1px solid var(--border); }
+
+/* 空状态 */
+.empty {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--text-2);
+}
+.empty .big { font-size: 32px; margin-bottom: 8px; }
+.empty p { margin: 4px 0; font-size: 13px; }
 
 .tag {
   font-size: 11px;
@@ -436,6 +468,18 @@ pre.log {
 /* 卡片悬停 */
 .card { transition: box-shadow .2s; }
 .card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.06); }
+
+.card-head h3 {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: .01em;
+}
+.card-head {
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.card-head:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
 
 /* 按钮优化 */
 button {
