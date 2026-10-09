@@ -495,15 +495,19 @@ function renderPolicies() {
     container.innerHTML = '<div class="card"><p class="note">还没有策略。</p></div>';
     return;
   }
-  container.innerHTML = state.policies.map((p, i) => `
+  container.innerHTML = state.policies.map((p, i) => {
+    const collapsed = localStorage.getItem(`mybox-policy-collapsed-${i}`) === '1';
+    return `
     <div class="card" data-policy="${i}">
       <div class="card-head">
+        <button class="small" data-p-collapse="${i}" title="${collapsed ? '展开' : '折叠'}">${collapsed ? '▶' : '▼'}</button>
         <h3>${escapeHtml(p.name)}</h3>
         <span class="tag muted">${escapeHtml(p.flipTag || '')}</span>
         <div class="spacer"></div>
         <span class="note" data-p-status="${i}">${p.enabled ? '已启用' : '已关闭'}</span>
         <label class="switch"><input type="checkbox" data-p-enabled="${i}" ${p.enabled ? 'checked' : ''}><span></span></label>
       </div>
+      <div data-p-body="${i}" style="${collapsed ? 'display:none' : ''}">
       <div class="row">
         <label class="field"><span>名称</span><input data-p-name="${i}" value="${escapeHtml(p.name)}"></label>
         <label class="field"><span>出口</span>
@@ -516,8 +520,9 @@ function renderPolicies() {
       <label class="field"><span>域名（逗号分隔）</span><input data-p-domain="${i}" value="${escapeHtml((p.domain || []).join(', '))}"></label>
       <label class="field"><span>域名后缀（逗号分隔）</span><input data-p-suffix="${i}" value="${escapeHtml((p.domainSuffix || []).join(', '))}"></label>
       <button class="small danger" data-p-remove="${i}">删除这条策略</button>
+      </div>
     </div>
-  `).join('');
+  `;}).join('');
 }
 
 function renderSettings() {
@@ -861,6 +866,18 @@ function bindEvents() {
   });
 
   $('policyList').addEventListener('click', (e) => {
+    // 折叠/展开
+    const cIdx = e.target.dataset.pCollapse;
+    if (cIdx !== undefined) {
+      const key = `mybox-policy-collapsed-${cIdx}`;
+      const nowCollapsed = localStorage.getItem(key) !== '1';
+      localStorage.setItem(key, nowCollapsed ? '1' : '0');
+      const body = document.querySelector(`[data-p-body="${cIdx}"]`);
+      if (body) body.style.display = nowCollapsed ? 'none' : '';
+      e.target.textContent = nowCollapsed ? '▶' : '▼';
+      e.target.title = nowCollapsed ? '展开' : '折叠';
+      return;
+    }
     const idx = e.target.dataset.pRemove;
     if (idx === undefined) return;
     state.policies.splice(Number(idx), 1);
