@@ -748,6 +748,10 @@ function bindEvents() {
     await loadPolicies();
     toast('已恢复默认策略，记得「保存并部署」');
   }));
+  $('btnRefreshRulesets').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
+    const r = await api('/rulesets/refresh', { method: 'POST' });
+    toast(r.ok ? `规则集已更新（删了 ${r.deleted} 个缓存），内核已重启` : ('更新失败：' + (r.error || '未知错误')));
+  }));
 
   $('btnSaveSettings').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
     const patch = {

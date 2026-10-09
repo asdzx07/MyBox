@@ -184,10 +184,12 @@
         <button class="primary" id="btnSavePolicies">保存策略</button>
         <button id="btnAddPolicy">新增策略</button>
         <button id="btnResetPolicies">恢复默认策略</button>
+        <button id="btnRefreshRulesets">更新规则集</button>
         <p class="note" style="margin-top:10px">
           没命中任何策略的流量走「兜底」出口（默认走代理）。这样按裸 IP 发起的连接
           （App 硬编码 IP、客户端自带 DNS）也能正常代理出去。想改成「只代理被墙的」，
           去「节点」页把「兜底」切到「直连」。
+          <br>规则集（geosite/geoip）每天自动更新，点「更新规则集」立即更新。
         </p>
       </div>
     </section>

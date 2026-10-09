@@ -356,6 +356,30 @@ app.post('/api/adblock/refresh', async (req, res) => {
   }
 });
 
+app.post('/api/rulesets/refresh', async (req, res) => {
+  try {
+    // 删掉所有缓存的远程规则集 SRS（策略用的 geosite/geoip），重启内核强制重新下载
+    const fs = await import('node:fs');
+    const { DATA_DIR } = await import('./lib/paths.mjs');
+    const path = await import('node:path');
+    let deleted = 0;
+    for (const dir of [DATA_DIR, '/tmp', process.cwd()]) {
+      try {
+        for (const f of fs.readdirSync(dir)) {
+          if (f.endsWith('.srs')) {
+            fs.unlinkSync(path.join(dir, f));
+            deleted++;
+          }
+        }
+      } catch {}
+    }
+    await kernel.restart();
+    res.json({ ok: true, deleted });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.post('/api/deploy', async (req, res) => {
   try {
     const report = await deploy.deploy({ restart: req.body?.restart !== false });
