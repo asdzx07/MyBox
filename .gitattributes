@@ -1,0 +1,9 @@
+# 统一用 LF。Windows 上检出成 CRLF 会让 install.sh 之类的脚本在 Linux 上跑不起来
+# （shebang 后面跟着 \r，内核找不到解释器）。
+* text=auto eol=lf
+*.sh text eol=lf
+*.mjs text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.service text eol=lf

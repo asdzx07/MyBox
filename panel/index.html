@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>BoxPilot</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+
+<div id="gate" class="gate hidden">
+  <div class="gate-card">
+    <h1>BoxPilot</h1>
+    <p id="gateHint">请输入面板密码</p>
+    <label class="field">
+      <span>密码</span>
+      <input id="gatePassword" type="password" autocomplete="current-password" placeholder="至少 6 位">
+    </label>
+    <label class="field hidden" id="gateConfirmField">
+      <span>再输一次</span>
+      <input id="gateConfirm" type="password" autocomplete="new-password">
+    </label>
+    <button id="gateSubmit" class="primary" style="width:100%">进入</button>
+    <p id="gateError" class="err-text" style="margin:12px 0 0"></p>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+  <header class="topbar">
+    <div class="brand">BoxPilot<small id="brandVersion"></small></div>
+    <nav class="tabs">
+      <button data-tab="overview" class="active">概览</button>
+      <button data-tab="subscriptions">订阅</button>
+      <button data-tab="groups">分组</button>
+      <button data-tab="policies">策略</button>
+      <button data-tab="settings">设置</button>
+      <button data-tab="logout">退出</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ---------------------------------------------------------- 概览 -->
+    <section class="page active" id="page-overview">
+      <h2>概览</h2>
+
+      <div class="card">
+        <div class="card-head">
+          <h3>运行状态</h3>
+          <div class="spacer"></div>
+          <button class="small" id="btnDeploy">部署配置</button>
+          <button class="small" id="btnRestart">重启内核</button>
+          <button class="small" id="btnStop">停止内核</button>
+        </div>
+        <div class="grid">
+          <div class="stat"><div class="k">内核</div><div class="v" id="statKernel">—</div></div>
+          <div class="stat"><div class="k">内核版本</div><div class="v" id="statVersion" style="font-size:14px">—</div></div>
+          <div class="stat"><div class="k">节点</div><div class="v" id="statNodes">—</div></div>
+          <div class="stat"><div class="k">已启用策略</div><div class="v" id="statPolicies">—</div></div>
+        </div>
+        <p class="note" id="overviewNote" style="margin-top:12px"></p>
+        <p class="err-text" id="overviewError"></p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>内核日志</h3><div class="spacer"></div>
+          <button class="small" id="btnLog">刷新</button>
+        </div>
+        <pre class="log" id="kernelLog">—</pre>
+      </div>
+    </section>
+
+    <!-- ---------------------------------------------------------- 订阅 -->
+    <section class="page" id="page-subscriptions">
+      <h2>订阅</h2>
+
+      <div class="card">
+        <h3>添加订阅</h3>
+        <div class="row">
+          <label class="field" style="flex:1 1 180px"><span>名称</span><input id="subName" placeholder="可留空"></label>
+          <label class="field" style="flex:2 1 280px"><span>订阅地址</span><input id="subUrl" placeholder="https://..."></label>
+          <div class="fixed"><button class="primary" id="btnAddSub">添加并拉取</button></div>
+        </div>
+        <p class="note">支持 sing-box JSON、Clash YAML、base64 分享链接。</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>已有订阅</h3><div class="spacer"></div>
+          <button class="small" id="btnRefreshSubs">全部刷新</button>
+        </div>
+        <div class="list" id="subList"></div>
+      </div>
+    </section>
+
+    <!-- ---------------------------------------------------------- 分组 -->
+    <section class="page" id="page-groups">
+      <h2>节点分组</h2>
+      <p class="note" style="margin:-6px 0 14px">「自动择优」组按延迟选最快节点；「手动选择」组自己挑。动态组会按关键词自动收编新节点。</p>
+      <div id="groupList"></div>
+      <div class="card"><button class="primary" id="btnSaveGroups">保存分组</button></div>
+    </section>
+
+    <!-- ---------------------------------------------------------- 策略 -->
+    <section class="page" id="page-policies">
+      <h2>目标分流</h2>
+      <p class="note" style="margin:-6px 0 14px">
+        从上往下匹配，先命中的算数。<strong>开关只改一个几十字节的小文件，内核自动重载，不重启、不断流。</strong>
+      </p>
+      <div id="policyList"></div>
+      <div class="card">
+        <button class="primary" id="btnSavePolicies">保存策略</button>
+        <button id="btnAddPolicy">新增策略</button>
+      </div>
+    </section>
+
+    <!-- ---------------------------------------------------------- 设置 -->
+    <section class="page" id="page-settings">
+      <h2>设置</h2>
+
+      <div class="card">
+        <h3>网络</h3>
+        <div class="row">
+          <label class="field"><span>TUN 协议栈</span>
+            <select id="setTunStack"><option value="mixed">mixed</option><option value="gvisor">gvisor</option><option value="system">system</option></select>
+          </label>
+          <label class="field"><span>TUN MTU（0 = 默认）</span><input id="setTunMtu" type="number" min="0"></label>
+          <label class="field"><span>端口直连（逗号分隔）</span><input id="setBypassPorts" placeholder="例如 22,3389"></label>
+        </div>
+        <div class="inline" style="flex-wrap:wrap;gap:16px">
+          <label class="inline"><input type="checkbox" id="setIpv6" style="width:auto"> 启用 IPv6</label>
+          <label class="inline"><input type="checkbox" id="setRejectQuic" style="width:auto"> 屏蔽 QUIC</label>
+          <label class="inline"><input type="checkbox" id="setAutoRedirect" style="width:auto"> nftables 转发（auto_redirect）</label>
+          <label class="inline"><input type="checkbox" id="setDirectForNodes" style="width:auto"> 节点服务器直连</label>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>DNS</h3>
+        <div class="row">
+          <label class="field"><span>接管方式</span>
+            <select id="setDnsMode">
+              <option value="dnsmasq">dnsmasq 接管（推荐）</option>
+              <option value="off">不接管，自己管</option>
+            </select>
+          </label>
+          <label class="field"><span>直连 DNS</span><input id="setDnsDirect" placeholder="223.5.5.5"></label>
+          <label class="field"><span>代理 DNS</span><input id="setDnsProxy" placeholder="1.1.1.1"></label>
+        </div>
+        <label class="inline"><input type="checkbox" id="setFakeIp" style="width:auto"> 代理域名使用 FakeIP</label>
+      </div>
+
+      <div class="card">
+        <h3>内核</h3>
+        <div class="row">
+          <label class="field"><span>当前版本</span><input id="setKernelVersion" readonly></label>
+          <label class="field"><span>日志级别</span>
+            <select id="setLogLevel"><option>trace</option><option>debug</option><option>info</option><option>warn</option><option>error</option></select>
+          </label>
+        </div>
+        <div class="inline" style="flex-wrap:wrap">
+          <button id="btnCheckUpdate">检查最新版本</button>
+          <button id="btnInstallKernel">安装/更新官方内核</button>
+          <span class="note" id="kernelUpdateNote"></span>
+        </div>
+        <p class="note" style="margin-top:10px">内核始终来自官方 SagerNet/sing-box Release，本项目不做任何修改。</p>
+      </div>
+
+      <div class="card">
+        <button class="primary" id="btnSaveSettings">保存并部署</button>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="./app.js"></script>
+</body>
+</html>

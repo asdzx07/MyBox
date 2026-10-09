@@ -1,0 +1,21 @@
+[Unit]
+Description=BoxPilot sing-box 内核（官方原版）
+Documentation=https://github.com/asdzx07/boxpilot
+After=network-online.target boxpilot-panel.service
+Wants=network-online.target
+StartLimitIntervalSec=3600
+StartLimitBurst=5
+
+[Service]
+Type=simple
+ExecStart=/opt/boxpilot/bin/sing-box run -c /opt/boxpilot/etc/config.json -D /opt/boxpilot/data
+Restart=on-failure
+RestartSec=5
+# 让内核收到 SIGTERM 后能正常收尾（关 tun、清路由），超时才强杀
+KillMode=mixed
+TimeoutStopSec=15
+LimitNOFILE=65535
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+[Install]
+WantedBy=multi-user.target

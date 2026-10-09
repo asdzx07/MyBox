@@ -1,0 +1,25 @@
+{
+  "name": "boxpilot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "基于官方 sing-box 的透明代理控制面板",
+  "license": "MIT",
+  "author": "asdzx07",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/asdzx07/boxpilot.git"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server/index.mjs",
+    "dev": "BOXPILOT_ROOT=./runtime node server/index.mjs",
+    "check": "node --check server/index.mjs"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "yaml": "^2.8.0"
+  }
+}
