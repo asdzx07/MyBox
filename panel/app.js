@@ -304,14 +304,20 @@ const HIST_LEN = 45;
 async function loadTraffic() {
   try {
     const t = await api('/traffic');
-    if (!t.ok) return;
-    $('statUp').textContent = t.connected ? fmtSpeed(t.up) : '—';
-    $('statDown').textContent = t.connected ? fmtSpeed(t.down) : '—';
-    $('statTotalUp').textContent = fmtBytes(t.totalUp);
-    $('statTotalDown').textContent = fmtBytes(t.totalDown);
+    if (!t) return;
+    const up = Number(t.up) || 0;
+    const down = Number(t.down) || 0;
+    const totalUp = Number(t.totalUp) || 0;
+    const totalDown = Number(t.totalDown) || 0;
+
+    $('statUp').textContent = fmtSpeed(up);
+    $('statDown').textContent = fmtSpeed(down);
+    $('statTotalUp').textContent = fmtBytes(totalUp);
+    $('statTotalDown').textContent = fmtBytes(totalDown);
+
     // 写入历史
-    trafficHist.up.push(t.connected ? t.up : 0);
-    trafficHist.down.push(t.connected ? t.down : 0);
+    trafficHist.up.push(up);
+    trafficHist.down.push(down);
     if (trafficHist.up.length > HIST_LEN) trafficHist.up.shift();
     if (trafficHist.down.length > HIST_LEN) trafficHist.down.shift();
     drawTrafficChart();
@@ -328,10 +334,11 @@ function drawTrafficChart() {
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, w, h);
 
-  const max = Math.max(1024 * 50, ...trafficHist.up, ...trafficHist.down);
+  // 动态根据历史最大值缩放，最低 10KB/s 防止零流量浮动，有数据时自适应跳动
+  const max = Math.max(1024 * 10, ...trafficHist.up, ...trafficHist.down);
 
   // 绘制水平辅助虚线
-  ctx.strokeStyle = 'rgba(148, 163, 184, 0.15)';
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.12)';
   ctx.lineWidth = 1;
   for (let i = 1; i <= 3; i++) {
     const y = (h / 4) * i;
@@ -347,19 +354,18 @@ function drawTrafficChart() {
     const step = w / (HIST_LEN - 1);
     data.forEach((v, i) => {
       const x = i * step;
-      const y = h - 6 - (v / max) * (h - 20);
+      const y = h - 6 - (v / max) * (h - 22);
       if (i === 0) ctx.moveTo(x, y);
       else {
-        // 平滑连线
         const prevX = (i - 1) * step;
-        const prevY = h - 6 - (data[i - 1] / max) * (h - 20);
+        const prevY = h - 6 - (data[i - 1] / max) * (h - 22);
         const cpX = (prevX + x) / 2;
         ctx.bezierCurveTo(cpX, prevY, cpX, y, x, y);
       }
     });
 
     ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = 2.5;
+    ctx.lineWidth = 2.2;
     ctx.stroke();
 
     if (fillColor) {
@@ -391,11 +397,16 @@ function startTrafficPoll() {
 async function loadOverview() {
   try {
     const data = await api('/overview');
-    const running = data.kernel?.running;
+    const running = Boolean(data.kernel?.running);
     $('heroDot').className = 'dot ' + (running ? 'on' : 'off');
-    $('statKernel').textContent = running
-      ? `运行中（PID ${data.kernel.pid} · 运行时长 ${data.kernel.uptime || '刚刚'}）`
-      : '未运行';
+    
+    if (!running) {
+      $('statKernel').textContent = '未运行';
+    } else {
+      const pidStr = data.kernel?.pid ? `PID ${data.kernel.pid}` : (data.kernel?.supervisor ? `${data.kernel.supervisor} 守护` : '系统托管');
+      const timeStr = data.kernel?.uptime ? ` · 运行 ${data.kernel.uptime}` : '';
+      $('statKernel').textContent = `运行中 (${pidStr}${timeStr})`;
+    }
 
     let note = '';
     if (data.kernel?.reloadedAt) {
@@ -515,16 +526,70 @@ function renderClients() {
         </div>
         <div class="note" style="margin-top:2px">${escapeHtml(c.note || '')}</div>
       </div>
-      <div class="inline" style="gap:10px">
+      <div class="inline" style="gap:8px">
         <select onchange="updateClientMode(${i}, this.value)" style="width:auto;font-size:12px;padding:4px 8px">
           <option value="rule"${c.mode === 'rule' ? ' selected' : ''}>规则分流 (推荐)</option>
           <option value="proxy"${c.mode === 'proxy' ? ' selected' : ''}>全局代理</option>
           <option value="direct"${c.mode === 'direct' ? ' selected' : ''}>完全直连 (绕过代理)</option>
         </select>
-        <button class="small danger" onclick="removeClient(${i})" style="padding:4px 8px">删除</button>
+        <button class="small" onclick="openClientModal(${i})" style="padding:4px 9px">编辑</button>
+        <button class="small danger" onclick="removeClient(${i})" style="padding:4px 9px">删除</button>
       </div>
     </div>
   `).join('');
+}
+
+window.openClientModal = function(index = -1) {
+  const modal = $('clientModal');
+  if (!modal) return;
+  $('modalClientIndex').value = index;
+  if (index >= 0 && state.clients[index]) {
+    const c = state.clients[index];
+    $('modalTitle').textContent = '编辑内网设备';
+    $('modalClientName').value = c.name || '';
+    $('modalClientIp').value = c.ip || '';
+    $('modalClientMode').value = c.mode || 'rule';
+  } else {
+    $('modalTitle').textContent = '添加内网设备';
+    $('modalClientName').value = '';
+    $('modalClientIp').value = '';
+    $('modalClientMode').value = 'rule';
+  }
+  modal.classList.remove('hidden');
+};
+
+window.closeClientModal = function() {
+  const modal = $('clientModal');
+  if (modal) modal.classList.add('hidden');
+};
+
+function saveClientModal() {
+  const idx = Number($('modalClientIndex').value);
+  const name = $('modalClientName').value.trim();
+  const ip = $('modalClientIp').value.trim();
+  const mode = $('modalClientMode').value;
+  if (!ip) {
+    toast('请输入设备 IP 地址');
+    return;
+  }
+  if (idx >= 0 && state.clients[idx]) {
+    state.clients[idx].name = name || '未命名设备';
+    state.clients[idx].ip = ip;
+    state.clients[idx].mode = mode;
+    toast(`已更新设备「${name || ip}」`);
+  } else {
+    state.clients.push({
+      id: Date.now().toString(),
+      name: name || '未命名设备',
+      ip,
+      mode,
+      note: '手动添加'
+    });
+    toast(`已添加设备「${name || ip}」`);
+  }
+  localStorage.setItem(CLIENTS_STORAGE_KEY, JSON.stringify(state.clients));
+  renderClients();
+  closeClientModal();
 }
 
 window.updateClientMode = function(index, mode) {
@@ -895,19 +960,18 @@ function bindEvents() {
     toast('分组已保存，记得「部署配置」生效');
   }));
 
-  // 内网分流按键
+  // 内网分流按键与弹窗
   $('btnScanClients')?.addEventListener('click', () => {
     loadClients();
-    toast('局域网设备扫描完成 (已同步 3 台设备)');
+    toast('局域网设备扫描完成 (已同步设备列表)');
   });
   $('btnAddClient')?.addEventListener('click', () => {
-    const ip = prompt('请输入局域网设备 IP（如 192.168.1.188）：');
-    if (!ip) return;
-    const name = prompt('请输入设备备注名称（如 客厅投影仪）：') || '未命名设备';
-    state.clients.push({ id: Date.now().toString(), name, ip, mode: 'rule', note: '手动添加' });
-    localStorage.setItem(CLIENTS_STORAGE_KEY, JSON.stringify(state.clients));
-    renderClients();
-    toast(`已添加设备 ${name} (${ip})`);
+    openClientModal(-1);
+  });
+  $('btnCancelClientModal')?.addEventListener('click', closeClientModal);
+  $('btnSaveClientModal')?.addEventListener('click', saveClientModal);
+  $('clientModal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'clientModal') closeClientModal();
   });
 
   // 连接页

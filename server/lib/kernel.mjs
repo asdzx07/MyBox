@@ -188,6 +188,39 @@ function alive(pid) {
   }
 }
 
+async function detectPid() {
+  const p = readPid();
+  if (p && alive(p)) return p;
+  if (process.platform === 'linux') {
+    try {
+      const { stdout } = await execFileAsync('pidof', ['sing-box'], { timeout: 1500 });
+      const first = Number.parseInt(stdout.trim().split(/\s+/)[0], 10);
+      if (Number.isFinite(first) && alive(first)) return first;
+    } catch {}
+  }
+  return null;
+}
+
+function getUptime(pid) {
+  if (!pid) return null;
+  try {
+    const stat = fs.statSync(`/proc/${pid}`);
+    const sec = Math.max(1, Math.floor((Date.now() - stat.mtimeMs) / 1000));
+    if (sec < 60) return `${sec} 秒`;
+    if (sec < 3600) return `${Math.floor(sec / 60)} 分钟`;
+    if (sec < 86400) {
+      const h = Math.floor(sec / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      return `${h} 小时 ${m} 分`;
+    }
+    const d = Math.floor(sec / 86400);
+    const h = Math.floor((sec % 86400) / 3600);
+    return `${d} 天 ${h} 小时`;
+  } catch {
+    return null;
+  }
+}
+
 /** 有服务管理器就交给它（procd / systemd）；没有（开发机）就直接拉进程。 */
 function supervised() {
   const p = platform.detect();
@@ -198,20 +231,23 @@ export async function status() {
   const plat = platform.detect();
   if (supervised()) {
     const running = await platform.serviceActive(platform.SERVICES.kernel);
+    const pid = running ? await detectPid() : null;
     return {
       running,
-      pid: null,
+      pid,
+      uptime: getUptime(pid),
       version: await installedVersion(),
       installed: installed(),
       supervisor: plat.supervisor,
       platform: plat.id,
     };
   }
-  const pid = readPid();
+  const pid = await detectPid();
   const running = alive(pid);
   return {
     running,
     pid: running ? pid : null,
+    uptime: getUptime(pid),
     version: await installedVersion(),
     installed: installed(),
     supervisor: 'direct',

@@ -276,18 +276,67 @@
       <h2>核心设置</h2>
 
       <div class="card">
-        <h3>网络与 TUN 栈</h3>
-        <div class="inline" style="flex-wrap:wrap;gap:16px">
-          <label class="inline"><input type="checkbox" id="setIpv6" style="width:auto"> 启用 IPv6</label>
-          <label class="inline"><input type="checkbox" id="setRejectQuic" style="width:auto"> 屏蔽 QUIC</label>
-          <label class="inline"><input type="checkbox" id="setAutoRedirect" style="width:auto"> nftables 转发（auto_redirect）</label>
-          <label class="inline"><input type="checkbox" id="setDirectBypass" style="width:auto"> 直连不进内核 (零损耗)</label>
-          <label class="inline"><input type="checkbox" id="setDirectForNodes" style="width:auto"> 节点服务器直连</label>
+        <div class="card-head">
+          <h3>网络与 TUN 栈设置</h3>
         </div>
-        <p class="note" style="margin-top:10px">
-          TUN 协议栈由 sing-box 自动管理，无需手动设置。<br>
-          「直连不进内核」把「目标是直连」的策略所涉及的 IP 集合从 tun 路由里排除，
-          这些流量根本不经过内核，直连零开销。
+        <div class="setting-list">
+          <div class="setting-item">
+            <div class="grow">
+              <div class="title">直连不进内核 (零损耗)</div>
+              <div class="sub">国内直连 IP 集合在 tun 路由中直接排除，流量根本不进内核，直连零开销</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="setDirectBypass">
+              <span></span>
+            </label>
+          </div>
+
+          <div class="setting-item">
+            <div class="grow">
+              <div class="title">nftables 转发 (auto_redirect)</div>
+              <div class="sub">由系统 nftables 负责自动劫持和转发透明代理流量</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="setAutoRedirect">
+              <span></span>
+            </label>
+          </div>
+
+          <div class="setting-item">
+            <div class="grow">
+              <div class="title">节点服务器直连</div>
+              <div class="sub">代理节点服务器自身的 IP 强制直连，防止节点握手流量产生环路</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="setDirectForNodes">
+              <span></span>
+            </label>
+          </div>
+
+          <div class="setting-item">
+            <div class="grow">
+              <div class="title">屏蔽 QUIC (UDP 443)</div>
+              <div class="sub">阻止浏览器或客户端走 HTTP3/QUIC，回退至更稳定的 TCP 代理链路</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="setRejectQuic">
+              <span></span>
+            </label>
+          </div>
+
+          <div class="setting-item">
+            <div class="grow">
+              <div class="title">启用 IPv6</div>
+              <div class="sub">接管并分流局域网 IPv6 流量（若局域网未配置 IPv6 建议关闭）</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="setIpv6">
+              <span></span>
+            </label>
+          </div>
+        </div>
+        <p class="note" style="margin-top:12px">
+          TUN 协议栈由 sing-box 原生自动管理，无需手动维护路由表。改动后请点击页面底部「保存并部署」。
         </p>
       </div>
 
@@ -345,14 +394,19 @@
       </div>
 
       <div class="card">
-        <h3>面板版本</h3>
-        <div class="row">
-          <span class="note">当前版本：<strong id="sysVersion">—</strong></span>
-          <span class="note" id="sysUpdateHint"></span>
+        <div class="card-head">
+          <h3>面板版本</h3>
+          <div class="spacer"></div>
+          <button class="small" id="btnCheckSysUpdate">检查更新</button>
+          <button class="small primary" id="btnSysUpdate" style="display:none">立即更新</button>
         </div>
-        <div class="row" style="margin-top:8px">
-          <button id="btnCheckSysUpdate">检查更新</button>
-          <button id="btnSysUpdate" class="primary" style="display:none">更新面板</button>
+        <div class="stat-row">
+          <span>当前代码版本</span>
+          <strong id="sysVersion">—</strong>
+        </div>
+        <div class="stat-row">
+          <span>更新状态</span>
+          <span class="note" id="sysUpdateHint">点击右上角「检查更新」</span>
         </div>
         <p class="note" style="margin-top:10px">更新会替换 server/panel/system 代码，保留 data/（订阅、设置不变），然后重启面板和内核。</p>
       </div>
@@ -362,6 +416,34 @@
       </div>
     </section>
   </main>
+</div>
+
+<!-- 内网设备编辑/添加弹窗 -->
+<div id="clientModal" class="modal-overlay hidden">
+  <div class="modal-card">
+    <h3 id="modalTitle">编辑内网设备</h3>
+    <input type="hidden" id="modalClientIndex" value="-1">
+    <label class="field">
+      <span>设备名称 / 备注</span>
+      <input id="modalClientName" placeholder="例如：客厅 Apple TV、群晖 NAS">
+    </label>
+    <label class="field">
+      <span>设备 IP 地址</span>
+      <input id="modalClientIp" placeholder="例如：192.168.1.188">
+    </label>
+    <label class="field">
+      <span>分流策略</span>
+      <select id="modalClientMode">
+        <option value="rule">规则分流 (推荐)</option>
+        <option value="proxy">全局代理</option>
+        <option value="direct">完全直连 (绕过代理)</option>
+      </select>
+    </label>
+    <div class="modal-actions">
+      <button class="small" id="btnCancelClientModal">取消</button>
+      <button class="small primary" id="btnSaveClientModal">保存</button>
+    </div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
