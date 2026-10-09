@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MyBox for Windows</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- 左侧经典边栏 -->
+  <aside class="sidebar">
+    <div class="brand">
+      <h1>sing-box</h1>
+      <span>MyBox Companion v1.0.0</span>
+    </div>
+
+    <nav class="nav-list">
+      <div class="nav-item active" data-tab="overview">
+        <svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        <span>概述</span>
+      </div>
+      <div class="nav-item" data-tab="groups">
+        <svg class="nav-icon" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        <span>组</span>
+      </div>
+      <div class="nav-item" data-tab="routing">
+        <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        <span>分流</span>
+      </div>
+      <div class="nav-item" data-tab="conns">
+        <svg class="nav-icon" viewBox="0 0 24 24"><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/><polyline points="17 14 12 9 7 14"/><line x1="12" y1="9" x2="12" y2="21"/></svg>
+        <span>连接</span>
+      </div>
+      <div class="nav-item" data-tab="settings">
+        <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>设置</span>
+      </div>
+    </nav>
+  </aside>
+
+  <!-- 主视窗 -->
+  <main class="main-viewport">
+    <header class="top-header">
+      <div class="header-left">
+        <div class="status-capsule" id="topCapsule" title="点击一键切换旁路由接管状态">
+          <span id="capsuleTime">未连接 ▶</span>
+          <span class="capsule-sq"></span>
+        </div>
+        <div class="view-title" id="pageTitle">仪表</div>
+      </div>
+      <div class="header-right">
+        <div class="btn-icon" id="btnRefreshAll" title="刷新数据">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+        </div>
+      </div>
+    </header>
+
+    <div class="content-scroll">
+      <!-- 1. 概述 / 仪表 -->
+      <section class="view-section active" id="sec-overview">
+        <!-- 实时速率卡片 -->
+        <div class="grid-2">
+          <div class="stat-card">
+            <div>
+              <div class="card-meta-title"><span>⇧ 上传</span></div>
+              <div class="card-val" id="dispUp">0.0 B/s</div>
+              <div class="card-sub" id="dispUpTotal">累计 0 B</div>
+            </div>
+            <svg class="mini-chart" id="chartUp" viewBox="0 0 90 38">
+              <path id="chartUpArea" d="M0 38 L90 38 Z" fill="rgba(0,0,0,0.06)"/>
+              <path id="chartUpLine" d="M0 38 L90 38" fill="none" stroke="#222" stroke-width="1.8"/>
+            </svg>
+          </div>
+
+          <div class="stat-card">
+            <div>
+              <div class="card-meta-title"><span>⇩ 下载</span></div>
+              <div class="card-val" id="dispDown">0.0 B/s</div>
+              <div class="card-sub" id="dispDownTotal">累计 0 B</div>
+            </div>
+            <svg class="mini-chart" id="chartDown" viewBox="0 0 90 38">
+              <path id="chartDownArea" d="M0 38 L90 38 Z" fill="rgba(0,0,0,0.06)"/>
+              <path id="chartDownLine" d="M0 38 L90 38" fill="none" stroke="#222" stroke-width="1.8"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- 状态与连接卡片 -->
+        <div class="grid-2">
+          <div class="info-card">
+            <div class="info-head">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+              <span>状态</span>
+            </div>
+            <div class="info-row"><span class="k">旁路由目标</span><span class="v" id="infoGwIp" style="color:var(--accent)">192.168.3.2</span></div>
+            <div class="info-row"><span class="k">本机 IPv4 (DHCP)</span><span class="v" id="infoLocalIp">—</span></div>
+            <div class="info-row"><span class="k">旁路由延迟</span><span class="v" id="infoPing">—</span></div>
+            <div class="info-row"><span class="k">内核状态</span><span class="v" id="infoKernelState" style="color:var(--ok)">检测中...</span></div>
+          </div>
+
+          <div class="info-card">
+            <div class="info-head">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3v12M18 9v12M18 9l-4-4M18 9l4-4M6 15l-4 4M6 15l4 4"/></svg>
+              <span>连接</span>
+            </div>
+            <div class="info-row"><span class="k">实时活动连接</span><span class="v" id="dispConnCount">0</span></div>
+            <div class="info-row"><span class="k">入站 DNS</span><span class="v" id="infoDnsMode">Fake-IP (7853)</span></div>
+            <div class="info-row"><span class="k">网关模式</span><span class="v" id="infoGwMode">主路由直连 (192.168.3.1)</span></div>
+            <div class="info-row"><span class="k">直连绕过</span><span class="v">物理旁路零损耗</span></div>
+          </div>
+        </div>
+
+        <!-- 旁路由一键接管控制卡片 -->
+        <div class="gateway-card">
+          <div class="gateway-info">
+            <h3 id="gwTitle">当前状态：直连主路由 (未走旁路由代理)</h3>
+            <p id="gwDesc">Windows 保持主路由 192.168.3.1 自动分配 IP 不变。点击右侧按钮瞬间切换为由旁路由 192.168.3.2 分流接管。</p>
+          </div>
+          <button class="btn-toggle-gw" id="btnToggleGw">
+            <span id="btnGwText">一键连接旁路由</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- 2. 组 / 节点管理 -->
+      <section class="view-section" id="sec-groups">
+        <div class="panel-box">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+            <div>
+              <h3>出口节点组</h3>
+              <p class="sub-tip">点击节点卡片即可无缝切换出口，通过内核 Clash API 切换，不断流、不重启。</p>
+            </div>
+            <button class="small-btn" id="btnReloadGroups">刷新节点</button>
+          </div>
+          <div id="groupCardsContainer" class="group-cards-stack">
+            <p class="empty-tip">正在加载旁路由节点列表...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. 分流策略 -->
+      <section class="view-section" id="sec-routing">
+        <div class="panel-box">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+            <div>
+              <h3>目标分流策略</h3>
+              <p class="sub-tip">直接在此处修改策略的出口目标（直连、拒绝、特定组或节点），保存后内核自动热应用。</p>
+            </div>
+            <button class="small-btn primary" id="btnSavePoliciesLocal">保存策略并应用</button>
+          </div>
+          <div id="policyListContainer" class="policy-stack">
+            <p class="empty-tip">正在拉取分流策略...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. 当前连接 -->
+      <section class="view-section" id="sec-conns">
+        <div class="panel-box">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+            <div style="display:flex;align-items:center;gap:8px;flex:1 1 240px">
+              <input type="text" id="connSearchLocal" placeholder="搜索连接 (域名/IP/规则/链路)..." class="search-input">
+              <button class="small-btn" id="btnClearConnSearchLocal">清空</button>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <button class="small-btn danger" id="btnCloseAllConnsLocal">清空连接</button>
+              <button class="small-btn" id="btnReloadConnsLocal">刷新</button>
+            </div>
+          </div>
+          <div id="connsListContainer" class="conn-list-stack">
+            <p class="empty-tip">正在拉取实时活动连接...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. 设置 -->
+      <section class="view-section" id="sec-settings">
+        <div class="panel-box" style="max-width:560px">
+          <h3 style="margin-bottom:16px">客户端与旁路由配置</h3>
+          
+          <div class="form-group">
+            <label>旁路由 IP 地址</label>
+            <input type="text" id="cfgGatewayIp" value="192.168.3.2" class="text-input">
+            <span class="field-hint">局域网中运行 MyBox 的旁路由静态 IP</span>
+          </div>
+
+          <div class="form-group">
+            <label>MyBox 面板端口</label>
+            <input type="number" id="cfgGatewayPort" value="3036" class="text-input">
+            <span class="field-hint">默认 3036 端口</span>
+          </div>
+
+          <div class="form-group" style="display:flex;align-items:center;gap:10px;margin-top:12px;margin-bottom:12px">
+            <input type="checkbox" id="cfgAutoConnect" checked style="width:16px;height:16px;cursor:pointer">
+            <label for="cfgAutoConnect" style="margin-bottom:0;cursor:pointer;font-size:13px;font-weight:500">打开客户端时自动连上旁路由并接管流量</label>
+          </div>
+
+          <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap">
+            <button class="small-btn primary" id="btnSaveConfigLocal">保存配置</button>
+            <button class="small-btn" id="btnOpenWebPanel" title="在系统浏览器打开完整控制台">打开网页版面板</button>
+            <button class="small-btn danger" id="btnResetWinNet" title="彻底清除临时路由并还原DNS">一键还原网络</button>
+            <button class="small-btn" id="btnExitApp" style="background:#4b5563;color:#fff" title="关闭客户端后台并恢复主路由网络">退出应用</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- 提示浮层 -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
