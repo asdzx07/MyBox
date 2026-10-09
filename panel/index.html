@@ -255,6 +255,19 @@
       </div>
 
       <div class="card">
+        <h3>面板版本</h3>
+        <div class="row">
+          <span class="note">当前版本：<strong id="sysVersion">—</strong></span>
+          <span class="note" id="sysUpdateHint"></span>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <button id="btnCheckSysUpdate">检查更新</button>
+          <button id="btnSysUpdate" class="primary" style="display:none">更新面板</button>
+        </div>
+        <p class="note" style="margin-top:10px">更新会替换 server/panel/system 代码，保留 data/（订阅、设置不变），然后重启面板和内核。</p>
+      </div>
+
+      <div class="card">
         <button class="primary" id="btnSaveSettings">保存并部署</button>
       </div>
     </section>

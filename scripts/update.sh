@@ -67,6 +67,10 @@ for d in server panel system; do
 done
 cp "$SRCDIR/package.json" "$ROOT/"
 
+# 记录版本号（GitHub 最新 commit 短 hash）
+COMMIT=$(curl -fsSL "https://api.github.com/repos/$REPO/commits/$BRANCH" 2>/dev/null | grep -o '"sha": "[a-f0-9]*"' | head -1 | cut -d'"' -f4 | cut -c1-7)
+[ -n "$COMMIT" ] && echo "$COMMIT" > "$ROOT/VERSION" || echo "unknown" > "$ROOT/VERSION"
+
 say "更新依赖"
 cd "$ROOT"
 if command -v npm >/dev/null 2>&1; then

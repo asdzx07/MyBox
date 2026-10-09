@@ -397,6 +397,50 @@ app.post('/api/teardown', async (req, res) => {
   }
 });
 
+/* -------------------------------------------------------------- 系统更新 */
+
+app.get('/api/system/version', async (req, res) => {
+  try {
+    const fs = await import('node:fs');
+    const { ROOT } = await import('./lib/paths.mjs');
+    const path = await import('node:path');
+    let current = 'unknown';
+    try {
+      current = fs.readFileSync(path.join(ROOT, 'VERSION'), 'utf8').trim() || 'unknown';
+    } catch {}
+    // 查 GitHub 最新 commit
+    let latest = null;
+    try {
+      const r = await fetch('https://api.github.com/repos/asdzx07/MyBox/commits/main', {
+        headers: { 'User-Agent': 'mybox' },
+      });
+      if (r.ok) {
+        const j = await r.json();
+        latest = j.sha?.slice(0, 7) || null;
+      }
+    } catch {}
+    res.json({ ok: true, current, latest, hasUpdate: latest && current !== 'unknown' && latest !== current });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/system/update', async (req, res) => {
+  try {
+    const { exec } = await import('node:child_process');
+    const { promisify } = await import('node:util');
+    const execAsync = promisify(exec);
+
+    // 后台跑更新脚本，立即返回（脚本会重启面板，不能等它）
+    execAsync('curl -fsSL https://raw.githubusercontent.com/asdzx07/MyBox/main/scripts/update.sh | sh', {
+      timeout: 300000,
+    }).catch(() => {});
+    res.json({ ok: true, message: '更新已在后台开始，面板即将重启，请稍后刷新页面' });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 /* -------------------------------------------------------------- 内核 */
 
 app.post('/api/kernel/:action', async (req, res) => {

@@ -527,6 +527,12 @@ function renderPolicies() {
 
 function renderSettings() {
   const s = state.settings;
+  // 面板版本号（不阻塞，失败就显示 unknown）
+  api('/system/version').then((v) => {
+    $('sysVersion').textContent = v.current || 'unknown';
+  }).catch(() => {
+    $('sysVersion').textContent = 'unknown';
+  });
   $('setIpv6').checked = Boolean(s.network.ipv6);
   $('setRejectQuic').checked = Boolean(s.network.rejectQuic);
   $('setAutoRedirect').checked = s.network.tun.autoRedirect !== false;
@@ -790,6 +796,26 @@ function bindEvents() {
   $('btnCheckUpdate').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
     const latest = await api('/kernel/latest');
     $('kernelUpdateNote').textContent = `最新 ${latest.version}（${new Date(latest.publishedAt).toLocaleDateString()}）`;
+  }));
+
+  // 面板版本检查与更新
+  $('btnCheckSysUpdate').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
+    const v = await api('/system/version');
+    $('sysVersion').textContent = v.current || 'unknown';
+    if (v.hasUpdate) {
+      $('sysUpdateHint').textContent = `有新版本 ${v.latest} 可更新`;
+      $('btnSysUpdate').style.display = '';
+    } else if (v.latest) {
+      $('sysUpdateHint').textContent = '已是最新';
+      $('btnSysUpdate').style.display = 'none';
+    } else {
+      $('sysUpdateHint').textContent = '检查失败（网络问题）';
+    }
+  }));
+  $('btnSysUpdate').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
+    if (!confirm('确定更新面板？更新过程中面板会重启，请稍后手动刷新页面。')) return;
+    const r = await api('/system/update', { method: 'POST' });
+    toast(r.message || '更新已开始');
   }));
 
   $('btnInstallKernel').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
