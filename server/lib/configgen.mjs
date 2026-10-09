@@ -9,6 +9,7 @@ const GEOIP_BASE = 'https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-s
 const ADBLOCK_URL = 'https://raw.githubusercontent.com/privacy-protection-tools/anti-ad.github.io/master/docs/anti-ad-sing-box.srs';
 const ADBLOCK_TAG = 'adblock';
 const ADBLOCK_ALLOW_TAG = 'adblock-allow';
+const ADBLOCK_CUSTOM_TAG = 'adblock-custom';
 
 export const DIRECT_TAG = '直连';
 export const BLOCK_TAG = '拒绝';
@@ -65,8 +66,18 @@ export function adblockAllowRuleSetPath() {
   return path.join(RULESET_DIR, `${ADBLOCK_ALLOW_TAG}.json`);
 }
 
+export function adblockCustomRuleSetPath() {
+  return path.join(RULESET_DIR, `${ADBLOCK_CUSTOM_TAG}.json`);
+}
+
 /** 广告白名单规则集的内容（本地 source 格式，用户自维护）。 */
 export function buildAdblockAllowRuleSet(domains) {
+  const list = [...new Set((domains || []).map((d) => String(d).trim()).filter(Boolean))];
+  return { version: 1, rules: list.length ? [{ domain_suffix: list }] : [] };
+}
+
+/** 手动广告黑名单规则集的内容（本地 source 格式，用户自维护）。 */
+export function buildAdblockCustomRuleSet(domains) {
   const list = [...new Set((domains || []).map((d) => String(d).trim()).filter(Boolean))];
   return { version: 1, rules: list.length ? [{ domain_suffix: list }] : [] };
 }
@@ -305,14 +316,18 @@ function buildDns(settings, names) {
 
   const rules = [];
 
-  // DNS 广告过滤：命中 block 且不在白名单 → NXDOMAIN。
-  // 放最前面，优先级最高。白名单是本地规则集，用户在面板维护。
+  // DNS 广告过滤：命中 block（远程规则集或手动添加）且不在白名单 → NXDOMAIN。
+  // 放最前面，优先级最高。白名单和手动规则都是本地规则集，面板可编辑。
   if (dns.adblock) {
     rules.push({
       type: 'logical',
       mode: 'and',
       rules: [
-        { rule_set: [ADBLOCK_TAG] },
+        {
+          type: 'logical',
+          mode: 'or',
+          rules: [{ rule_set: [ADBLOCK_TAG] }, { rule_set: [ADBLOCK_CUSTOM_TAG] }],
+        },
         { rule_set: [ADBLOCK_ALLOW_TAG], invert: true },
       ],
       action: 'reject',
@@ -450,6 +465,10 @@ function buildRoute(settings, names) {
     if (!seen.has(ADBLOCK_ALLOW_TAG)) {
       seen.add(ADBLOCK_ALLOW_TAG);
       ruleSets.push({ type: 'local', tag: ADBLOCK_ALLOW_TAG, format: 'source', path: adblockAllowRuleSetPath() });
+    }
+    if (!seen.has(ADBLOCK_CUSTOM_TAG)) {
+      seen.add(ADBLOCK_CUSTOM_TAG);
+      ruleSets.push({ type: 'local', tag: ADBLOCK_CUSTOM_TAG, format: 'source', path: adblockCustomRuleSetPath() });
     }
   }
 

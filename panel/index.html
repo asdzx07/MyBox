@@ -105,6 +105,7 @@
         <div class="card-head">
           <h3>内核日志</h3>
           <div class="spacer"></div>
+          <input id="logSearch" placeholder="搜索日志…" style="width:200px">
           <label class="inline note"><input type="checkbox" id="logAuto" style="width:auto"> 自动刷新</label>
           <button class="small" id="btnLog">刷新</button>
         </div>
@@ -225,7 +226,14 @@
         </div>
         <label class="inline"><input type="checkbox" id="setFakeIp" style="width:auto"> 代理域名使用 FakeIP</label>
         <label class="inline"><input type="checkbox" id="setAdblock" style="width:auto"> DNS 广告过滤（开屏广告）</label>
-        <label class="field"><span>广告白名单（每行一个域名，误杀时填）</span><textarea id="setAdblockAllow" rows="3" placeholder="example.com"></textarea></label>
+        <div class="row">
+          <label class="field"><span>手动广告规则（每行一个域名）</span><textarea id="setAdblockCustom" rows="3" placeholder="ads.example.com"></textarea></label>
+          <label class="field"><span>广告白名单（每行一个域名，误杀时填）</span><textarea id="setAdblockAllow" rows="3" placeholder="example.com"></textarea></label>
+        </div>
+        <div class="row">
+          <button class="small" id="btnAdblockRefresh">更新广告规则集</button>
+          <span class="note">远程规则集每天自动更新，点此立即更新</span>
+        </div>
       </div>
 
       <div class="card">

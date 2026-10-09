@@ -364,13 +364,26 @@ async function loadSbSubGroups() {
   } catch { box.innerHTML = ''; }
 }
 
+let rawKernelLog = '';
 async function loadKernelLog() {
   try {
     const { log } = await api('/kernel/log?lines=200');
-    $('kernelLog').textContent = log || '（还没有日志）';
+    rawKernelLog = log || '';
+    filterKernelLog();
   } catch {
     /* 忽略 */
   }
+}
+
+/** 日志搜索过滤 */
+function filterKernelLog() {
+  const q = ($('logSearch').value || '').trim().toLowerCase();
+  if (!q) {
+    $('kernelLog').textContent = rawKernelLog || '（还没有日志）';
+    return;
+  }
+  const lines = rawKernelLog.split('\n').filter((l) => l.toLowerCase().includes(q));
+  $('kernelLog').textContent = lines.length ? lines.join('\n') : '（没有匹配的日志）';
 }
 
 let logTimer = null;
@@ -520,6 +533,7 @@ function renderSettings() {
   $('setFakeIp').checked = Boolean(s.dns.fakeIp);
   $('setAdblock').checked = Boolean(s.dns.adblock);
   $('setAdblockAllow').value = (s.dns.adblockAllow || []).join('\n');
+  $('setAdblockCustom').value = (s.dns.adblockCustom || []).join('\n');
   $('setKernelVersion').value = s.kernel.installed
     ? (s.kernel.version ? `已安装 ${s.kernel.version}` : '已安装（版本未知）')
     : '（未安装）';
@@ -588,6 +602,11 @@ function bindEvents() {
   }));
   $('btnLog').addEventListener('click', loadKernelLog);
   $('logAuto').addEventListener('change', scheduleLogAuto);
+  $('logSearch').addEventListener('input', filterKernelLog);
+  $('btnAdblockRefresh').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
+    const r = await api('/adblock/refresh', { method: 'POST' });
+    toast(r.ok ? '广告规则集已更新，内核已重启' : ('更新失败：' + (r.error || '未知错误')));
+  }));
 
   // ---- 概览页的节点组 / 当前连接
   $('btnOverviewNodes').addEventListener('click', (e) => withBusy(e.currentTarget, loadOverviewGroups));
@@ -749,6 +768,7 @@ function bindEvents() {
         fakeIp: $('setFakeIp').checked,
         adblock: $('setAdblock').checked,
         adblockAllow: $('setAdblockAllow').value.split('\n').map((s) => s.trim()).filter(Boolean),
+        adblockCustom: $('setAdblockCustom').value.split('\n').map((s) => s.trim()).filter(Boolean),
       },
       kernel: { logLevel: $('setLogLevel').value },
     };

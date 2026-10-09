@@ -116,6 +116,7 @@ export function defaultSettings() {
       hijackPort: 7853,
       adblock: false,
       adblockAllow: [],
+      adblockCustom: [],
     },
     subscriptions: [],
     nodes: [],

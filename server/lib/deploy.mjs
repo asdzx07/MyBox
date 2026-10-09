@@ -10,6 +10,7 @@ import {
   generateConfig, buildNodeDirectRuleSet, nodeDirectRuleSetPath,
   buildDirectIpRuleSet, directIpRuleSetPath, ruleSetUrl,
   buildAdblockAllowRuleSet, adblockAllowRuleSetPath,
+  buildAdblockCustomRuleSet, adblockCustomRuleSetPath,
 } from './configgen.mjs';
 import { setFlip, flipTag } from './flip.mjs';
 import * as kernel from './kernel.mjs';
@@ -137,6 +138,9 @@ async function deployInner({ restart = true, skipNetwork = false } = {}) {
     const allow = buildAdblockAllowRuleSet(settings.dns.adblockAllow);
     writeSmallFile(adblockAllowRuleSetPath(), `${JSON.stringify(allow)}\n`, { mode: 0o644 });
     step('写入广告白名单', `${(allow.rules[0]?.domain_suffix || []).length} 个域名`);
+    const custom = buildAdblockCustomRuleSet(settings.dns.adblockCustom);
+    writeSmallFile(adblockCustomRuleSetPath(), `${JSON.stringify(custom)}\n`, { mode: 0o644 });
+    step('写入手动广告规则', `${(custom.rules[0]?.domain_suffix || []).length} 个域名`);
   }
 
   // ---- 2. 校验规则集能下载（内核拉不到会直接 FATAL）

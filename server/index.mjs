@@ -332,6 +332,30 @@ app.post('/api/policies/:id/toggle', (req, res) => {
 
 /* -------------------------------------------------------------- 部署 */
 
+app.post('/api/adblock/refresh', async (req, res) => {
+  try {
+    // 删掉缓存的广告规则集 SRS，重启内核强制重新下载
+    const fs = await import('node:fs');
+    const { DATA_DIR } = await import('./lib/paths.mjs');
+    const path = await import('node:path');
+    let deleted = 0;
+    for (const dir of [DATA_DIR, '/tmp', process.cwd()]) {
+      try {
+        for (const f of fs.readdirSync(dir)) {
+          if (f === 'adblock.srs' || f.startsWith('adblock.')) {
+            fs.unlinkSync(path.join(dir, f));
+            deleted++;
+          }
+        }
+      } catch {}
+    }
+    await kernel.restart();
+    res.json({ ok: true, deleted });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.post('/api/deploy', async (req, res) => {
   try {
     const report = await deploy.deploy({ restart: req.body?.restart !== false });
