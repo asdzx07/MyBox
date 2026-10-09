@@ -6,7 +6,7 @@ import { flipTag } from './flip.mjs';
 const GEOSITE_BASE = 'https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set';
 const GEOIP_BASE = 'https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set';
 // 广告过滤规则集（anti-AD，sing-box SRS 格式）
-const ADBLOCK_URL = 'https://raw.githubusercontent.com/privacy-protection-tools/anti-AD/master/anti-ad-singbox.srs';
+const ADBLOCK_URL = 'https://raw.githubusercontent.com/privacy-protection-tools/anti-ad.github.io/master/docs/anti-ad-sing-box.srs';
 const ADBLOCK_TAG = 'adblock';
 const ADBLOCK_ALLOW_TAG = 'adblock-allow';
 
