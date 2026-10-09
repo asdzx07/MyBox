@@ -146,9 +146,13 @@ function buildOutbounds(settings) {
   for (const g of settings.groups) {
     if (!g.enabled) continue;
     const isDynamic = g.type === 'selector' && g.mode === 'dynamic';
+    const keywords = (g.keywords || []).filter(Boolean);
 
+    // 动态组：按关键词自动收编节点；没配关键词就是收编全部
     let members = isDynamic
-      ? nodeTags.filter((t) => (g.keywords || []).some((k) => t.toLowerCase().includes(String(k).toLowerCase())))
+      ? (keywords.length
+        ? nodeTags.filter((t) => keywords.some((k) => t.toLowerCase().includes(String(k).toLowerCase())))
+        : [...nodeTags])
       : (g.members || []).filter((t) => tags.has(t));
 
     // 自动择优组没配成员时收编全部节点，否则组是空的、选了它就没网

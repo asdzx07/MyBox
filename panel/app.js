@@ -360,7 +360,7 @@ function renderGroups() {
           <label class="field"><span>容差 (ms)</span><input type="number" data-g-tolerance="${i}" value="${Number(g.tolerance) || 100}"></label>
         </div>` : ''}
       <label class="field">
-        <span>${g.mode === 'dynamic' ? '关键词（逗号分隔，自动收编）' : '成员（逗号分隔）'}</span>
+        <span>${g.mode === 'dynamic' ? '关键词（逗号分隔；留空 = 收编全部节点）' : '成员（逗号分隔）'}</span>
         <input data-g-members="${i}" value="${escapeHtml((g.mode === 'dynamic' ? g.keywords : g.members).join(', '))}">
       </label>
       <p class="note">可用节点：${state.nodes.length ? escapeHtml(state.nodes.slice(0, 12).join('、')) + (state.nodes.length > 12 ? ` …等 ${state.nodes.length} 个` : '') : '（还没有节点）'}</p>
