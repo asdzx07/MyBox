@@ -172,6 +172,8 @@ nav.sb-nav button .bdg {
 
 .sb-foot { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--border); }
 .sb-foot button.ghost { width: 100%; justify-content: flex-start; }
+.sb-foot button .ic { width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; opacity: .75; }
+.sb-foot button .ic svg { width: 18px; height: 18px; }
 
 main {
   flex: 1;

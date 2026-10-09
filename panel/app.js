@@ -587,12 +587,42 @@ function renderPolicies() {
     return;
   }
   container.innerHTML = state.policies.map((p, i) => {
+function policyIcon(name) {
+  const n = (name || '').toLowerCase();
+  const icons = {
+    '测速': '⚡', 'speed': '⚡',
+    'ai': '🤖',
+    'youtube': '📺', '油管': '📺',
+    'tiktok': '🎵',
+    'netflix': '🎬', '奈飞': '🎬',
+    'github': '🐙',
+    'google': '🔍', '谷歌': '🔍',
+    'telegram': '✈️', 'tg': '✈️',
+    'twitter': '🐦',
+    'instagram': '📸', 'ins': '📸',
+    'facebook': '👤', 'fb': '👤',
+    'discord': '🎮',
+    'steam': '🎮',
+    'apple': '🍎',
+    'microsoft': '🪟',
+    'openai': '🤖', 'chatgpt': '🤖',
+    'claude': '🤖',
+    '国内': '🏠', '直连': '🏠',
+    '广告': '🚫', 'ad': '🚫',
+    '代理': '🌐', 'proxy': '🌐',
+  };
+  for (const [k, v] of Object.entries(icons)) {
+    if (n.includes(k)) return v;
+  }
+  return '🎯';
+}
+
     const collapsed = localStorage.getItem(`mybox-policy-collapsed-${i}`) === '1';
     return `
     <div class="card" data-policy="${i}">
       <div class="card-head">
         <button class="small" data-p-collapse="${i}" title="${collapsed ? '展开' : '折叠'}">${collapsed ? '▶' : '▼'}</button>
-        <h3>${escapeHtml(p.name)}</h3>
+        <h3><span style="margin-right:6px">${policyIcon(p.name)}</span>${escapeHtml(p.name)}</h3>
         <span class="tag muted">${escapeHtml(p.flipTag || '')}</span>
         <div class="spacer"></div>
         <span class="note" data-p-status="${i}">${p.enabled ? '已启用' : '已关闭'}</span>
