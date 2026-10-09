@@ -7,9 +7,12 @@ let state = { settings: null, groups: [], policies: [], targets: [], nodes: [] }
 /* --------------------------------------------------------------- 基础 */
 
 async function api(path, options = {}) {
+  // 部署接口可能耗时数分钟，单独给更长的超时
+  const timeoutMs = path === '/deploy' ? 300000 : 30000;
   const res = await fetch(`/api${path}`, {
     headers: { 'Content-Type': 'application/json' },
     ...options,
+    signal: AbortSignal.timeout(timeoutMs),
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
   const text = await res.text();
