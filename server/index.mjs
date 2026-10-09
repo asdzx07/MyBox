@@ -791,6 +791,56 @@ app.get('/api/nodes/connections', async (req, res) => {
   }
 });
 
+/* ----------------------------------------------------------- 内网设备分流 */
+
+app.get('/api/clients', async (req, res) => {
+  try {
+    const { loadSavedClients, scanLocalNetworkClients } = await import('./lib/clients.mjs');
+    let clients = loadSavedClients();
+    if (!clients.length) {
+      clients = await scanLocalNetworkClients();
+    }
+    res.json({ ok: true, clients });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/clients/scan', async (req, res) => {
+  try {
+    const { scanLocalNetworkClients } = await import('./lib/clients.mjs');
+    const clients = await scanLocalNetworkClients();
+    res.json({ ok: true, clients, count: clients.length });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/clients', async (req, res) => {
+  try {
+    const { saveClients } = await import('./lib/clients.mjs');
+    const clients = req.body?.clients;
+    if (!Array.isArray(clients)) return res.status(400).json({ ok: false, error: 'clients 必须是数组' });
+    saveClients(clients);
+    res.json({ ok: true, clients });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.delete('/api/clients/:id', async (req, res) => {
+  try {
+    const { loadSavedClients, saveClients } = await import('./lib/clients.mjs');
+    const { id } = req.params;
+    let list = loadSavedClients();
+    list = list.filter((c) => c.id !== id && c.ip !== id);
+    saveClients(list);
+    res.json({ ok: true, clients: list });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.use('/api/controller', async (req, res) => {
   const settings = loadSettings();
   const suffix = req.url && req.url !== '/' ? req.url : '/';

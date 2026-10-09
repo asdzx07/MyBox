@@ -498,7 +498,22 @@ label.field > span { display: block; font-size: 12px; font-weight: 500; color: v
 .row > .fixed { flex: 0 0 auto; }
 .inline { display: flex; gap: 8px; align-items: center; }
 
-/* --------------------------------------------------------------- 节点网格卡片升级 */
+.group-head {
+  user-select: none;
+  transition: opacity .15s ease;
+}
+.group-head:hover {
+  opacity: 0.88;
+}
+.group-head .chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  font-size: 13px;
+  color: var(--text-3);
+  margin-right: 4px;
+}
 
 .node-grid {
   display: grid;

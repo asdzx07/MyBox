@@ -467,8 +467,6 @@ async function loadConnectionsPage() {
     const data = await api('/connections');
     const conns = data.connections || [];
     countEl.textContent = `${conns.length} 条连接 · 累计 ↓ ${fmtBytes(data.downloadTotal || 0)} / ↑ ${fmtBytes(data.uploadTotal || 0)}`;
-    $('sbConnCount').textContent = conns.length;
-    $('sbConnCount').classList.toggle('hidden', conns.length === 0);
 
     if (!conns.length) {
       listEl.innerHTML = '<p class="note" style="padding:16px 0;text-align:center">当前没有活动连接</p>';
@@ -534,51 +532,45 @@ window.closeAllConnections = async function() {
 };
 
 /* --------------------------------------------------------------- 内网分流 (NEW) */
+/* --------------------------------------------------------------- 内网分流 */
 
-const CLIENTS_STORAGE_KEY = 'mybox_clients_rules';
-
-function loadClients() {
-  let clients = [];
+async function loadClients() {
+  const box = $('clientList');
   try {
-    clients = JSON.parse(localStorage.getItem(CLIENTS_STORAGE_KEY) || '[]');
-  } catch {}
-  if (!clients.length) {
-    // 默认展示常见内网设备模板
-    clients = [
-      { id: '1', name: '常用办公电脑 (Mac/PC)', ip: '192.168.1.102', mode: 'rule', note: '默认走规则分流' },
-      { id: '2', name: '家庭存储 (NAS / PT 下载机)', ip: '192.168.1.80', mode: 'direct', note: '强制完全直连 (防止PT封号)' },
-      { id: '3', name: '客厅电视 (Apple TV / 电视盒子)', ip: '192.168.1.150', mode: 'proxy', note: '全局代理模式' }
-    ];
-    localStorage.setItem(CLIENTS_STORAGE_KEY, JSON.stringify(clients));
+    const res = await api('/clients');
+    state.clients = res.clients || [];
+    renderClients();
+  } catch (err) {
+    if (box) box.innerHTML = `<p class="err-text" style="padding:12px 0">加载内网设备失败：${escapeHtml(err.message)}</p>`;
   }
-  state.clients = clients;
-  renderClients();
 }
 
 function renderClients() {
   const box = $('clientList');
   if (!box) return;
   if (!state.clients.length) {
-    box.innerHTML = '<p class="note">暂无自定义内网分流设备，局域网所有设备默认按「规则分流」运行。</p>';
+    box.innerHTML = '<p class="note" style="padding:16px 0;text-align:center">暂无内网设备。请点击上方「刷新设备列表」自动扫描在线设备，或点击「＋ 添加设备」手动添加。</p>';
     return;
   }
   box.innerHTML = state.clients.map((c, i) => `
     <div class="client-item">
       <div style="flex:1;min-width:0">
-        <div style="font-weight:600;font-size:14px;display:flex;align-items:center;gap:8px">
-          ${escapeHtml(c.name)}
-          <span class="tag muted" style="font-family:monospace">${escapeHtml(c.ip)}</span>
+        <div style="font-weight:600;font-size:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span>${escapeHtml(c.name || '未命名设备')}</span>
+          <span class="tag muted" style="font-family:monospace;font-size:12px">${escapeHtml(c.ip)}</span>
+          ${c.mac ? `<span class="tag muted" style="font-size:11px;opacity:0.8">${escapeHtml(c.mac)}</span>` : ''}
+          ${c.online ? `<span class="tag" style="color:var(--ok);font-size:11px;font-weight:600">● 在线</span>` : ''}
         </div>
-        <div class="note" style="margin-top:2px">${escapeHtml(c.note || '')}</div>
+        <div class="note" style="margin-top:4px">${escapeHtml(c.note || (c.online ? '局域网在线设备' : '已配置设备'))}</div>
       </div>
-      <div class="inline" style="gap:8px">
-        <select onchange="updateClientMode(${i}, this.value)" style="width:auto;font-size:12px;padding:4px 8px">
+      <div class="inline" style="gap:8px;align-items:center;flex-shrink:0">
+        <select onchange="updateClientMode('${escapeHtml(c.id || c.ip)}', this.value)" style="width:auto;font-size:12px;padding:4px 8px">
           <option value="rule"${c.mode === 'rule' ? ' selected' : ''}>规则分流 (推荐)</option>
           <option value="proxy"${c.mode === 'proxy' ? ' selected' : ''}>全局代理</option>
           <option value="direct"${c.mode === 'direct' ? ' selected' : ''}>完全直连 (绕过代理)</option>
         </select>
         <button class="small" onclick="openClientModal(${i})" style="padding:4px 9px">编辑</button>
-        <button class="small danger" onclick="removeClient(${i})" style="padding:4px 9px">删除</button>
+        <button class="small danger" onclick="removeClient('${escapeHtml(c.id || c.ip)}')" style="padding:4px 9px">删除</button>
       </div>
     </div>
   `).join('');
@@ -608,7 +600,7 @@ window.closeClientModal = function() {
   if (modal) modal.classList.add('hidden');
 };
 
-function saveClientModal() {
+async function saveClientModal() {
   const idx = Number($('modalClientIndex').value);
   const name = $('modalClientName').value.trim();
   const ip = $('modalClientIp').value.trim();
@@ -617,40 +609,59 @@ function saveClientModal() {
     toast('请输入设备 IP 地址');
     return;
   }
+  if (!/^192\.168\.\d+\.\d+|^10\.\d+\.\d+\.\d+|^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+/.test(ip)) {
+    toast('请输入正确的局域网内网 IP 地址');
+    return;
+  }
   if (idx >= 0 && state.clients[idx]) {
     state.clients[idx].name = name || '未命名设备';
     state.clients[idx].ip = ip;
     state.clients[idx].mode = mode;
-    toast(`已更新设备「${name || ip}」`);
   } else {
     state.clients.push({
-      id: Date.now().toString(),
-      name: name || '未命名设备',
+      id: `client-${Date.now()}`,
+      name: name || `设备 ${ip}`,
       ip,
       mode,
-      note: '手动添加'
+      note: '手动添加',
+      online: true,
     });
-    toast(`已添加设备「${name || ip}」`);
   }
-  localStorage.setItem(CLIENTS_STORAGE_KEY, JSON.stringify(state.clients));
-  renderClients();
-  closeClientModal();
+  try {
+    await api('/clients', { method: 'POST', body: { clients: state.clients } });
+    renderClients();
+    closeClientModal();
+    toast(`已保存设备「${name || ip}」`);
+  } catch (err) {
+    toast(`保存失败：${err.message}`);
+  }
 }
 
-window.updateClientMode = function(index, mode) {
-  if (state.clients[index]) {
-    state.clients[index].mode = mode;
-    localStorage.setItem(CLIENTS_STORAGE_KEY, JSON.stringify(state.clients));
-    toast(`已更新设备「${state.clients[index].name}」分流策略`);
+window.updateClientMode = async function(id, mode) {
+  const client = state.clients.find((c) => c.id === id || c.ip === id);
+  if (client) {
+    client.mode = mode;
+    try {
+      await api('/clients', { method: 'POST', body: { clients: state.clients } });
+      toast(`已更新设备「${client.name || client.ip}」策略为：${mode === 'direct' ? '完全直连' : (mode === 'proxy' ? '全局代理' : '规则分流')}`);
+    } catch (err) {
+      toast(`更新策略失败：${err.message}`);
+    }
   }
 };
 
-window.removeClient = function(index) {
-  if (confirm('确认移除该设备的独立分流规则？')) {
-    state.clients.splice(index, 1);
-    localStorage.setItem(CLIENTS_STORAGE_KEY, JSON.stringify(state.clients));
-    renderClients();
-    toast('已移除设备规则');
+window.removeClient = async function(id) {
+  const client = state.clients.find((c) => c.id === id || c.ip === id);
+  const name = client?.name || client?.ip || '该设备';
+  if (confirm(`确认移除「${name}」的独立分流规则？`)) {
+    try {
+      await api(`/clients/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      state.clients = state.clients.filter((c) => c.id !== id && c.ip !== id);
+      renderClients();
+      toast('已移除设备规则');
+    } catch (err) {
+      toast(`移除失败：${err.message}`);
+    }
   }
 };
 
@@ -759,20 +770,25 @@ function renderPolicies() {
     box.innerHTML = '<p class="note">还没有策略。</p>';
     return;
   }
-  box.innerHTML = state.policies.map((p, i) => `
-    <div class="card" style="background:var(--surface-2);margin-bottom:10px">
-      <div class="card-head" style="margin-bottom:10px">
+  const isCol = (idx) => state.policyCollapsed?.[idx] === true;
+
+  box.innerHTML = state.policies.map((p, i) => {
+    const collapsed = isCol(i);
+    return `
+    <div class="card" style="background:var(--surface-2);margin-bottom:12px">
+      <div class="card-head group-head" data-policy-collapse="${i}" style="cursor:pointer;margin-bottom:${collapsed ? '0' : '12px'}">
+        <span class="chevron">${collapsed ? '▸' : '▾'}</span>
         <h3 style="display:flex;align-items:center;gap:6px">${policyIcon(p.name)}${escapeHtml(p.name)}</h3>
         <span class="tag muted" data-p-status="${i}">${p.enabled ? '已启用' : '已关闭'}</span>
+        <span class="note" style="font-size:12px;margin-left:6px">出口：<strong style="color:var(--accent)">${escapeHtml(p.target || 'all-auto')}</strong></span>
         <div class="spacer"></div>
-        <label class="switch">
+        <label class="switch" onclick="event.stopPropagation()">
           <input type="checkbox" data-p-enabled="${i}"${p.enabled ? ' checked' : ''}>
           <span></span>
         </label>
-        <button class="small" data-p-collapse="${i}" title="折叠/展开">▼</button>
-        <button class="small danger" data-p-remove="${i}">删除</button>
+        <button class="small danger" data-p-remove="${i}" onclick="event.stopPropagation()">删除</button>
       </div>
-      <div data-p-body="${i}">
+      <div data-p-body="${i}" class="${collapsed ? 'hidden' : ''}">
         <div class="row">
           <label class="field"><span>策略名称</span><input data-p-name="${i}" value="${escapeHtml(p.name || '')}"></label>
           <label class="field"><span>出口目标（直连/拒绝/分组）</span><input data-p-target="${i}" value="${escapeHtml(p.target || '')}"></label>
@@ -783,7 +799,8 @@ function renderPolicies() {
         </div>
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 async function loadRulesetSubs() {
@@ -1043,9 +1060,22 @@ function bindEvents() {
   }));
 
   // 内网分流按键与弹窗
-  $('btnScanClients')?.addEventListener('click', () => {
-    loadClients();
-    toast('局域网设备扫描完成 (已同步设备列表)');
+  $('btnScanClients')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    const oldHtml = btn.innerHTML;
+    btn.innerHTML = '<span class="animate-spin">↻</span> 正在扫描局域网设备...';
+    try {
+      const res = await api('/clients/scan', { method: 'POST' });
+      state.clients = res.clients || [];
+      renderClients();
+      toast(`扫描完成，共发现 ${state.clients.length} 台局域网设备`);
+    } catch (err) {
+      toast(`扫描失败：${err.message}`);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = oldHtml;
+    }
   });
   $('btnAddClient')?.addEventListener('click', () => {
     openClientModal(-1);
@@ -1129,6 +1159,14 @@ function bindEvents() {
     renderPolicies();
   });
 
+  $('btnCollapseAllPolicies')?.addEventListener('click', () => {
+    if (!state.policyCollapsed) state.policyCollapsed = {};
+    const anyExpanded = state.policies.some((_, i) => !state.policyCollapsed[i]);
+    state.policies.forEach((_, i) => { state.policyCollapsed[i] = anyExpanded; });
+    renderPolicies();
+    toast(anyExpanded ? '已全部折叠分流策略' : '已全部展开分流策略');
+  });
+
   $('btnResetPolicies').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
     if (!confirm('恢复默认策略将覆盖当前自定义策略，确定？')) return;
     await api('/policies/reset', { method: 'POST' });
@@ -1140,6 +1178,50 @@ function bindEvents() {
     const r = await api('/rulesets/refresh', { method: 'POST' });
     toast(r.ok ? '规则集已更新' : ('更新失败：' + (r.error || '未知错误')));
   }));
+
+  $('policyList').addEventListener('click', (e) => {
+    // 1. 删除策略
+    const rmBtn = e.target.closest('[data-p-remove]');
+    if (rmBtn) {
+      const idx = Number(rmBtn.dataset.pRemove);
+      const p = state.policies[idx];
+      if (confirm(`确认删除分流策略「${p?.name || '该策略'}」？`)) {
+        state.policies.splice(idx, 1);
+        renderPolicies();
+        toast('已删除策略，记得点击「保存策略」');
+      }
+      return;
+    }
+    // 2. 点击卡片头折叠/展开 (同节点分组效果)
+    const collapseEl = e.target.closest('[data-policy-collapse]');
+    if (collapseEl && !e.target.closest('.switch') && !e.target.closest('button')) {
+      const idx = Number(collapseEl.dataset.policyCollapse);
+      if (!state.policyCollapsed) state.policyCollapsed = {};
+      state.policyCollapsed[idx] = !state.policyCollapsed[idx];
+      renderPolicies();
+    }
+  });
+
+  $('policyList').addEventListener('input', (e) => {
+    const t = e.target;
+    if (t.dataset.pName !== undefined) {
+      const i = Number(t.dataset.pName);
+      if (state.policies[i]) state.policies[i].name = t.value;
+    } else if (t.dataset.pTarget !== undefined) {
+      const i = Number(t.dataset.pTarget);
+      if (state.policies[i]) state.policies[i].target = t.value;
+    } else if (t.dataset.pRulesets !== undefined) {
+      const i = Number(t.dataset.pRulesets);
+      if (state.policies[i]) {
+        state.policies[i].rulesets = t.value.split(',').map((s) => s.trim()).filter(Boolean);
+      }
+    } else if (t.dataset.pSuffix !== undefined) {
+      const i = Number(t.dataset.pSuffix);
+      if (state.policies[i]) {
+        state.policies[i].domainSuffix = t.value.split(',').map((s) => s.trim()).filter(Boolean);
+      }
+    }
+  });
 
   $('policyList').addEventListener('change', async (e) => {
     const t = e.target;
