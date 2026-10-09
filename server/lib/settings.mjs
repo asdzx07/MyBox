@@ -114,6 +114,8 @@ export function defaultSettings() {
       fakeIpRange: '198.19.0.0/16',
       region: 'cn',
       hijackPort: 7853,
+      adblock: false,
+      adblockAllow: [],
     },
     subscriptions: [],
     nodes: [],

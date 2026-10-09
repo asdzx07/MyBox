@@ -518,6 +518,8 @@ function renderSettings() {
   $('setDnsDirect').value = s.dns.direct === 'wan' ? '' : (s.dns.directAddress || '');
   $('setDnsProxy').value = s.dns.proxy || '';
   $('setFakeIp').checked = Boolean(s.dns.fakeIp);
+  $('setAdblock').checked = Boolean(s.dns.adblock);
+  $('setAdblockAllow').value = (s.dns.adblockAllow || []).join('\n');
   $('setKernelVersion').value = s.kernel.installed
     ? (s.kernel.version ? `已安装 ${s.kernel.version}` : '已安装（版本未知）')
     : '（未安装）';
@@ -745,6 +747,8 @@ function bindEvents() {
         directAddress: $('setDnsDirect').value.trim(),
         proxy: $('setDnsProxy').value.trim() || '1.1.1.1',
         fakeIp: $('setFakeIp').checked,
+        adblock: $('setAdblock').checked,
+        adblockAllow: $('setAdblockAllow').value.split('\n').map((s) => s.trim()).filter(Boolean),
       },
       kernel: { logLevel: $('setLogLevel').value },
     };

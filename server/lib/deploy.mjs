@@ -9,6 +9,7 @@ import { writeJsonAtomic, writeSmallFile, readJson } from './fsx.mjs';
 import {
   generateConfig, buildNodeDirectRuleSet, nodeDirectRuleSetPath,
   buildDirectIpRuleSet, directIpRuleSetPath, ruleSetUrl,
+  buildAdblockAllowRuleSet, adblockAllowRuleSetPath,
 } from './configgen.mjs';
 import { setFlip, flipTag } from './flip.mjs';
 import * as kernel from './kernel.mjs';
@@ -130,6 +131,12 @@ async function deployInner({ restart = true, skipNetwork = false } = {}) {
     const directIp = buildDirectIpRuleSet(settings);
     writeSmallFile(directIpRuleSetPath(), `${JSON.stringify(directIp)}\n`, { mode: 0o644 });
     step('写入直连 IP 集合', `${(directIp.rules[0].ip_cidr || []).length} 条 CIDR（这些不进内核）`);
+  }
+
+  if (settings.dns.adblock) {
+    const allow = buildAdblockAllowRuleSet(settings.dns.adblockAllow);
+    writeSmallFile(adblockAllowRuleSetPath(), `${JSON.stringify(allow)}\n`, { mode: 0o644 });
+    step('写入广告白名单', `${(allow.rules[0]?.domain_suffix || []).length} 个域名`);
   }
 
   // ---- 2. 校验规则集能下载（内核拉不到会直接 FATAL）

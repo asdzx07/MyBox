@@ -5,6 +5,10 @@ import { flipTag } from './flip.mjs';
 
 const GEOSITE_BASE = 'https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set';
 const GEOIP_BASE = 'https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set';
+// 广告过滤规则集（anti-AD，sing-box SRS 格式）
+const ADBLOCK_URL = 'https://raw.githubusercontent.com/privacy-protection-tools/anti-AD/master/anti-ad-singbox.srs';
+const ADBLOCK_TAG = 'adblock';
+const ADBLOCK_ALLOW_TAG = 'adblock-allow';
 
 export const DIRECT_TAG = '直连';
 export const BLOCK_TAG = '拒绝';
@@ -55,6 +59,16 @@ export function nodeDirectRuleSetPath() {
 
 export function directIpRuleSetPath() {
   return path.join(RULESET_DIR, `${DIRECT_IP_RULESET}.json`);
+}
+
+export function adblockAllowRuleSetPath() {
+  return path.join(RULESET_DIR, `${ADBLOCK_ALLOW_TAG}.json`);
+}
+
+/** 广告白名单规则集的内容（本地 source 格式，用户自维护）。 */
+export function buildAdblockAllowRuleSet(domains) {
+  const list = [...new Set((domains || []).map((d) => String(d).trim()).filter(Boolean))];
+  return { version: 1, rules: list.length ? [{ domain_suffix: list }] : [] };
 }
 
 /** 节点服务器域名直连规则集的内容（本地 source 格式）。 */
@@ -291,6 +305,20 @@ function buildDns(settings, names) {
 
   const rules = [];
 
+  // DNS 广告过滤：命中 block 且不在白名单 → NXDOMAIN。
+  // 放最前面，优先级最高。白名单是本地规则集，用户在面板维护。
+  if (dns.adblock) {
+    rules.push({
+      type: 'logical',
+      mode: 'and',
+      rules: [
+        { rule_set: [ADBLOCK_TAG] },
+        { rule_set: [ADBLOCK_ALLOW_TAG], invert: true },
+      ],
+      action: 'reject',
+    });
+  }
+
   // 屏蔽 HTTPS/SVCB 记录：防止浏览器拿 DoH 记录绕过 DNS 分流
   rules.push({ query_type: ['HTTPS', 'SVCB'], action: 'predefined', rcode: 'NOERROR' });
 
@@ -404,6 +432,25 @@ function buildRoute(settings, names) {
   if (network.directBypass) {
     seen.add(DIRECT_IP_RULESET);
     ruleSets.push({ type: 'local', tag: DIRECT_IP_RULESET, format: 'source', path: directIpRuleSetPath() });
+  }
+
+  // DNS 广告过滤的规则集：远程 block + 本地白名单
+  if (settings.dns.adblock) {
+    if (!seen.has(ADBLOCK_TAG)) {
+      seen.add(ADBLOCK_TAG);
+      ruleSets.push({
+        type: 'remote',
+        tag: ADBLOCK_TAG,
+        format: 'binary',
+        url: ADBLOCK_URL,
+        update_interval: '24h',
+        http_client: { detour: names.has(FALLBACK_TAG) ? FALLBACK_TAG : DIRECT_TAG },
+      });
+    }
+    if (!seen.has(ADBLOCK_ALLOW_TAG)) {
+      seen.add(ADBLOCK_ALLOW_TAG);
+      ruleSets.push({ type: 'local', tag: ADBLOCK_ALLOW_TAG, format: 'source', path: adblockAllowRuleSetPath() });
+    }
   }
 
   for (const p of policies) {
