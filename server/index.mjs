@@ -283,14 +283,15 @@ app.put('/api/policies', (req, res) => {
   res.json({ ok: true, policies: clean });
 });
 
-/** 恢复默认策略。保留同名策略原来选的出口，其余用默认值。 */
+/**
+ * 恢复默认策略。
+ *
+ * 故意不保留旧出口：早期面板写的是分组名称、默认策略存的是分组 id，两套标识
+ * 混在一起，按名字"保留用户选择"会把「国内」这种本该直连的策略指到代理组上。
+ * 恢复默认就是恢复默认，要保留自己的配置请用「导出设置」。
+ */
 app.post('/api/policies/reset', (req, res) => {
-  const current = loadSettings({ force: true });
-  const targetByName = new Map(current.policies.map((p) => [p.name, p.target]));
-  const next = DEFAULT_POLICIES.map((p) => ({
-    ...p,
-    target: targetByName.get(p.name) ?? p.target,
-  }));
+  const next = DEFAULT_POLICIES.map((p) => ({ ...p }));
   mutateSettings((s) => {
     s.policies = next;
   });

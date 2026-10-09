@@ -563,7 +563,7 @@ function bindEvents() {
   });
 
   $('btnResetPolicies').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
-    if (!confirm('恢复成默认策略？你自己加的策略会被删掉（同名策略选的出口会保留）。')) return;
+    if (!confirm('恢复成默认策略？你自己加的策略会被删掉，出口选择也会重置。')) return;
     const r = await api('/policies/reset', { method: 'POST' });
     state.policies = r.policies;
     await loadPolicies();
