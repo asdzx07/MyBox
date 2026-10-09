@@ -2,10 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
-// 运行时根目录。Linux 上默认 /opt/boxpilot；开发时用 BOXPILOT_ROOT 指到本地。
-export const ROOT = process.env.BOXPILOT_ROOT
-  ? path.resolve(process.env.BOXPILOT_ROOT)
-  : '/opt/boxpilot';
+// 运行时根目录。Linux 上默认 /opt/mybox；开发时用 MYBOX_ROOT 指到本地。
+export const ROOT = process.env.MYBOX_ROOT
+  ? path.resolve(process.env.MYBOX_ROOT)
+  : '/opt/mybox';
 
 export const BIN_DIR = path.join(ROOT, 'bin');
 export const ETC_DIR = path.join(ROOT, 'etc');
@@ -34,8 +34,8 @@ export const KERNEL = {
   dnsPort: 7853,
   // 回环入站（本机走代理用）
   loopbackPort: 7891,
-  tunName: 'boxpilot-tun',
-  nftTable: 'boxpilot',
+  tunName: 'mybox-tun',
+  nftTable: 'mybox',
   routeTable: 2022,
   // 内核自身流量的 fwmark，和 ip rule 里的值必须一致
   fwmark: 0x2024,

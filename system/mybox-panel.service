@@ -1,14 +1,14 @@
 [Unit]
-Description=BoxPilot 面板
-Documentation=https://github.com/asdzx07/boxpilot
+Description=MyBox 面板
+Documentation=https://github.com/asdzx07/mybox
 After=network-online.target
 Wants=network-online.target
-Before=boxpilot-kernel.service
+Before=mybox-kernel.service
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/boxpilot
-ExecStart=/usr/bin/env node /opt/boxpilot/server/index.mjs
+WorkingDirectory=/opt/mybox
+ExecStart=/usr/bin/env node /opt/mybox/server/index.mjs
 Restart=on-failure
 RestartSec=5
 Environment=NODE_ENV=production

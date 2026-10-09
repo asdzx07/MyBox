@@ -1,4 +1,4 @@
-# BoxPilot
+# MyBox
 
 基于**官方 sing-box** 的透明代理控制面板。不 fork 内核、不带任何推广内容。
 
@@ -6,7 +6,7 @@
 
 ## 它是什么
 
-BoxPilot 把「订阅 → 节点 → 分流 → 内核」这条链路做成图形化操作，并负责把
+MyBox 把「订阅 → 节点 → 分流 → 内核」这条链路做成图形化操作，并负责把
 sing-box 接到系统网络栈上（tun / nftables / 路由策略 / DNS），让局域网设备
 改个网关就能用。
 
@@ -26,7 +26,7 @@ sing-box 的本地 rule-set（`type: local`）在启动时会被 `fswatch` 监�
 （见上游 `route/rule/rule_set_local.go`）。文件一变，内核立刻重新加载规则集
 并触发回调，**进程不动、已建立的连接不断**。
 
-BoxPilot 利用这一点：每个可切换的策略对应一个 50 字节左右的「开关文件」：
+MyBox 利用这一点：每个可切换的策略对应一个 50 字节左右的「开关文件」：
 
 ```jsonc
 // data/flip/obflip-<id>.json —— 开启
@@ -74,14 +74,14 @@ ERROR router: reload rule-set flip: invalid character 'T' looking for beginning 
                │
 ┌──────────────▼──────────────────────────────┐
 │ 系统网络栈                                    │
-│  nftables 表 boxpilot · ip rule 9000+ · tun  │
+│  nftables 表 mybox · ip rule 9000+ · tun  │
 └─────────────────────────────────────────────┘
 ```
 
 ## 目录布局（运行时）
 
 ```
-/opt/boxpilot/
+/opt/mybox/
 ├── bin/sing-box              官方二进制
 ├── etc/config.json           内核配置（生成物）
 ├── data/
@@ -98,7 +98,7 @@ ERROR router: reload rule-set flip: invalid character 'T' looking for beginning 
 Linux（Debian / Ubuntu，systemd）：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/asdzx07/boxpilot/main/scripts/install.sh | sudo sh
+curl -fsSL https://raw.githubusercontent.com/asdzx07/mybox/main/scripts/install.sh | sudo sh
 ```
 
 装完浏览器打开 `http://<机器IP>:3036`，首次访问设置面板密码。

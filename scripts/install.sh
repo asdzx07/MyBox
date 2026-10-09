@@ -1,7 +1,7 @@
 #!/bin/sh
-# BoxPilot 安装脚本（Debian / Ubuntu，systemd）
+# MyBox 安装脚本（Debian / Ubuntu，systemd）
 #
-#   curl -fsSL https://raw.githubusercontent.com/asdzx07/boxpilot/main/scripts/install.sh | sudo sh
+#   curl -fsSL https://raw.githubusercontent.com/asdzx07/mybox/main/scripts/install.sh | sudo sh
 #
 # 可选参数：
 #   --port <端口>     指定面板端口（默认 3036）
@@ -10,9 +10,9 @@
 #   --skip-kernel     只装面板，不下载内核
 set -eu
 
-REPO="asdzx07/boxpilot"
+REPO="asdzx07/mybox"
 BRANCH="main"
-ROOT=/opt/boxpilot
+ROOT=/opt/mybox
 PORT=""
 USE_MIRROR=0
 SRC_DIR=""
@@ -76,7 +76,7 @@ mkdir -p "$ROOT" "$ROOT/data"
 # ---------------------------------------------------------------- 取源码
 if [ -n "$SRC_DIR" ]; then
   say "从本地目录安装：$SRC_DIR"
-  [ -d "$SRC_DIR/server" ] || die "$SRC_DIR 里没有 server/，不是 BoxPilot 源码目录"
+  [ -d "$SRC_DIR/server" ] || die "$SRC_DIR 里没有 server/，不是 MyBox 源码目录"
   cp -R "$SRC_DIR/server" "$ROOT/"
   cp -R "$SRC_DIR/panel"  "$ROOT/"
   cp -R "$SRC_DIR/system" "$ROOT/" 2>/dev/null || true
@@ -84,7 +84,7 @@ if [ -n "$SRC_DIR" ]; then
 else
   say "下载源码"
   TMP=$(mktemp -d)
-  TARBALL="$TMP/boxpilot.tar.gz"
+  TARBALL="$TMP/mybox.tar.gz"
   URL="https://github.com/$REPO/archive/refs/heads/$BRANCH.tar.gz"
   ok=0
   if [ "$USE_MIRROR" = "1" ]; then
@@ -96,7 +96,7 @@ else
     curl -fsSL "$URL" -o "$TARBALL" || die "下载源码失败"
   fi
   tar -xzf "$TARBALL" -C "$TMP"
-  SRCDIR=$(find "$TMP" -maxdepth 1 -type d -name "boxpilot-*" | head -n 1)
+  SRCDIR=$(find "$TMP" -maxdepth 1 -type d -name "mybox-*" | head -n 1)
   [ -n "$SRCDIR" ] || die "解包后找不到源码目录"
   rm -rf "$ROOT/server" "$ROOT/panel" "$ROOT/system"
   cp -R "$SRCDIR/server" "$ROOT/"
@@ -168,18 +168,18 @@ fi
 say "安装 systemd 服务"
 UNIT_SRC="$ROOT/system"
 
-for unit in boxpilot-panel boxpilot-kernel; do
+for unit in mybox-panel mybox-kernel; do
   if [ -f "$UNIT_SRC/$unit.service" ]; then
     install -m 0644 "$UNIT_SRC/$unit.service" "/etc/systemd/system/$unit.service"
   fi
 done
 
-if [ ! -f /etc/systemd/system/boxpilot-panel.service ]; then
+if [ ! -f /etc/systemd/system/mybox-panel.service ]; then
   die "找不到 systemd 单元文件（$UNIT_SRC），无法安装服务"
 fi
 
 systemctl daemon-reload
-systemctl enable --now boxpilot-panel >/dev/null 2>&1 || warn "面板服务启动失败，看 journalctl -u boxpilot-panel"
+systemctl enable --now mybox-panel >/dev/null 2>&1 || warn "面板服务启动失败，看 journalctl -u mybox-panel"
 
 IP=$(ip -4 route get 1.1.1.1 2>/dev/null | grep -o 'src [0-9.]*' | awk '{print $2}')
 [ -n "$IP" ] || IP=$(hostname -I 2>/dev/null | awk '{print $1}')
@@ -187,7 +187,7 @@ IP=$(ip -4 route get 1.1.1.1 2>/dev/null | grep -o 'src [0-9.]*' | awk '{print $
 
 cat <<EOF
 
-  BoxPilot 安装完成。
+  MyBox 安装完成。
 
   面板地址：http://$IP:$PORT
   首次打开会要求设置面板密码。
@@ -198,9 +198,9 @@ cat <<EOF
     3. 把局域网设备的网关/DNS 指向本机（$IP）
 
   常用命令：
-    systemctl status boxpilot-panel     # 面板状态
-    journalctl -u boxpilot-panel -f     # 面板日志
-    journalctl -u boxpilot-kernel -f    # 内核日志
+    systemctl status mybox-panel     # 面板状态
+    journalctl -u mybox-panel -f     # 面板日志
+    journalctl -u mybox-kernel -f    # 内核日志
     卸载：curl -fsSL https://raw.githubusercontent.com/$REPO/main/scripts/uninstall.sh | sudo sh
 
 EOF

@@ -1,12 +1,12 @@
 #!/bin/sh
-# BoxPilot 卸载脚本。
+# MyBox 卸载脚本。
 #
-#   curl -fsSL https://raw.githubusercontent.com/asdzx07/boxpilot/main/scripts/uninstall.sh | sudo sh
+#   curl -fsSL https://raw.githubusercontent.com/asdzx07/mybox/main/scripts/uninstall.sh | sudo sh
 #
 # 默认只停服务、删程序，保留 data/（订阅、设置）。加 --purge 连数据一起删。
 set -eu
 
-ROOT=/opt/boxpilot
+ROOT=/opt/mybox
 PURGE=0
 [ "${1:-}" = "--purge" ] && PURGE=1
 
@@ -17,11 +17,11 @@ die() { printf '\033[1;31m[x]\033[0m %s\n' "$*" >&2; exit 1; }
 
 if [ -d /run/systemd/system ]; then
   say "停止服务"
-  systemctl stop boxpilot-kernel 2>/dev/null || true
-  systemctl stop boxpilot-panel 2>/dev/null || true
-  systemctl disable boxpilot-kernel 2>/dev/null || true
-  systemctl disable boxpilot-panel 2>/dev/null || true
-  rm -f /etc/systemd/system/boxpilot-kernel.service /etc/systemd/system/boxpilot-panel.service
+  systemctl stop mybox-kernel 2>/dev/null || true
+  systemctl stop mybox-panel 2>/dev/null || true
+  systemctl disable mybox-kernel 2>/dev/null || true
+  systemctl disable mybox-panel 2>/dev/null || true
+  rm -f /etc/systemd/system/mybox-kernel.service /etc/systemd/system/mybox-panel.service
   systemctl daemon-reload
 fi
 
@@ -40,8 +40,8 @@ if [ -f "$ROOT/data/netstack-state.json" ]; then
 fi
 
 # 残留的 tun 网卡和 nft 表
-ip link del boxpilot-tun 2>/dev/null || true
-nft delete table inet boxpilot 2>/dev/null || true
+ip link del mybox-tun 2>/dev/null || true
+nft delete table inet mybox 2>/dev/null || true
 
 if [ "$PURGE" = "1" ]; then
   say "删除 $ROOT（含数据）"

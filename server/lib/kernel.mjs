@@ -32,13 +32,13 @@ function archSuffix() {
   const a = map[arch];
   if (!a) throw new Error(`不支持的架构：${arch}`);
   // OpenWrt 用 musl，Debian/Ubuntu 用 glibc
-  const libc = process.env.BOXPILOT_LIBC || (fs.existsSync('/etc/openwrt_release') ? 'musl' : 'glibc');
+  const libc = process.env.MYBOX_LIBC || (fs.existsSync('/etc/openwrt_release') ? 'musl' : 'glibc');
   return `linux-${a}-${libc}`;
 }
 
 export async function fetchLatestVersion() {
   const url = `https://api.github.com/repos/${REPO}/releases/latest`;
-  const res = await fetch(url, { headers: { 'User-Agent': 'boxpilot' } });
+  const res = await fetch(url, { headers: { 'User-Agent': 'mybox' } });
   if (!res.ok) throw new Error(`查询最新版本失败：HTTP ${res.status}`);
   const json = await res.json();
   return { version: json.tag_name, publishedAt: json.published_at };
@@ -49,7 +49,7 @@ function assetName(version, suffix) {
 }
 
 async function download(url, dest) {
-  const res = await fetch(url, { headers: { 'User-Agent': 'boxpilot' }, redirect: 'follow' });
+  const res = await fetch(url, { headers: { 'User-Agent': 'mybox' }, redirect: 'follow' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const buf = Buffer.from(await res.arrayBuffer());
   fs.writeFileSync(dest, buf);
@@ -155,7 +155,7 @@ function hasSystemd() {
 }
 
 async function systemctl(action) {
-  await execFileAsync('systemctl', [action, 'boxpilot-kernel'], { timeout: 30000 });
+  await execFileAsync('systemctl', [action, 'mybox-kernel'], { timeout: 30000 });
 }
 
 export function status() {
@@ -178,7 +178,7 @@ export async function start() {
   if (hasSystemd()) {
     await systemctl('start');
     // 第一次成功启动后设为开机自启——配置校验已经过了，不会开机崩循环
-    await execFileAsync('systemctl', ['enable', 'boxpilot-kernel'], { timeout: 15000 }).catch(() => {});
+    await execFileAsync('systemctl', ['enable', 'mybox-kernel'], { timeout: 15000 }).catch(() => {});
     return status();
   }
 

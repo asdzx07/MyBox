@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { loadSettings, mutateSettings } from './settings.mjs';
 
-const COOKIE = 'boxpilot_session';
+const COOKIE = 'mybox_session';
 const TTL_MS = 7 * 24 * 3600 * 1000;
 
 function hashPassword(password, salt) {

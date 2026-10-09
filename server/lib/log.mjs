@@ -1,5 +1,5 @@
 const LEVELS = { debug: 10, info: 20, warn: 30, error: 40 };
-const CURRENT = LEVELS[process.env.BOXPILOT_LOG_LEVEL] ?? LEVELS.info;
+const CURRENT = LEVELS[process.env.MYBOX_LOG_LEVEL] ?? LEVELS.info;
 
 function emit(level, scope, args) {
   if (LEVELS[level] < CURRENT) return;

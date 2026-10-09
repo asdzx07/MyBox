@@ -1,15 +1,15 @@
 #!/bin/sh
-# BoxPilot 升级脚本：更新面板代码，保留 data/（订阅、设置、开关文件）。
+# MyBox 升级脚本：更新面板代码，保留 data/（订阅、设置、开关文件）。
 #
-#   curl -fsSL https://raw.githubusercontent.com/asdzx07/boxpilot/main/scripts/update.sh | sudo sh
+#   curl -fsSL https://raw.githubusercontent.com/asdzx07/mybox/main/scripts/update.sh | sudo sh
 #
 # 内核不在本脚本里升级——在面板「设置 → 内核」里点「安装/更新官方内核」，
 # 这样内核版本和面板版本可以各自独立。
 set -eu
 
-REPO="asdzx07/boxpilot"
+REPO="asdzx07/mybox"
 BRANCH="main"
-ROOT=/opt/boxpilot
+ROOT=/opt/mybox
 USE_MIRROR=0
 SRC_DIR=""
 
@@ -35,7 +35,7 @@ if [ -n "$SRC_DIR" ]; then
 else
   say "下载最新源码"
   TMP=$(mktemp -d)
-  TARBALL="$TMP/boxpilot.tar.gz"
+  TARBALL="$TMP/mybox.tar.gz"
   URL="https://github.com/$REPO/archive/refs/heads/$BRANCH.tar.gz"
   ok=0
   if [ "$USE_MIRROR" = "1" ]; then
@@ -47,7 +47,7 @@ else
     curl -fsSL "$URL" -o "$TARBALL" || die "下载源码失败"
   fi
   tar -xzf "$TARBALL" -C "$TMP"
-  SRCDIR=$(find "$TMP" -maxdepth 1 -type d -name "boxpilot-*" | head -n 1)
+  SRCDIR=$(find "$TMP" -maxdepth 1 -type d -name "mybox-*" | head -n 1)
   [ -n "$SRCDIR" ] || die "解包后找不到源码目录"
 fi
 
@@ -73,18 +73,18 @@ if command -v npm >/dev/null 2>&1; then
 fi
 
 say "更新 systemd 单元"
-for unit in boxpilot-panel boxpilot-kernel; do
+for unit in mybox-panel mybox-kernel; do
   [ -f "$ROOT/system/$unit.service" ] && install -m 0644 "$ROOT/system/$unit.service" "/etc/systemd/system/$unit.service"
 done
 systemctl daemon-reload
 
 say "重启面板"
-systemctl restart boxpilot-panel || die "面板重启失败，代码已备份在 $BACKUP"
+systemctl restart mybox-panel || die "面板重启失败，代码已备份在 $BACKUP"
 
 # 内核如果本来在跑，重启一次让新配置生效
-if systemctl is-active --quiet boxpilot-kernel; then
+if systemctl is-active --quiet mybox-kernel; then
   say "重启内核"
-  systemctl restart boxpilot-kernel || true
+  systemctl restart mybox-kernel || true
 fi
 
 [ -n "${TMP:-}" ] && rm -rf "$TMP"

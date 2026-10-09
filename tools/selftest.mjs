@@ -2,7 +2,7 @@
  * 自检：造一份带样例节点的设置，生成 sing-box 配置并写盘，
  * 然后用官方 sing-box 校验（脚本会打印出校验命令）。
  *
- *   BOXPILOT_ROOT=./runtime node tools/selftest.mjs
+ *   MYBOX_ROOT=./runtime node tools/selftest.mjs
  *   ./runtime/bin/sing-box check -c ./runtime/etc/config.json
  *
  * 这个脚本不联网，只用本地数据，方便在没有订阅时也能验证配置生成逻辑。
@@ -12,7 +12,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-process.env.BOXPILOT_ROOT ||= path.join(here, '..', 'runtime');
+process.env.MYBOX_ROOT ||= path.join(here, '..', 'runtime');
 
 const { ensureDirs, writeJsonAtomic, writeSmallFile } = await import('../server/lib/fsx.mjs');
 const { loadSettings, mutateSettings } = await import('../server/lib/settings.mjs');

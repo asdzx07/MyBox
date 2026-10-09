@@ -1,5 +1,5 @@
 {
-  "name": "boxpilot",
+  "name": "mybox",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -8,14 +8,14 @@
   "author": "asdzx07",
   "repository": {
     "type": "git",
-    "url": "https://github.com/asdzx07/boxpilot.git"
+    "url": "https://github.com/asdzx07/mybox.git"
   },
   "engines": {
     "node": ">=20"
   },
   "scripts": {
     "start": "node server/index.mjs",
-    "dev": "BOXPILOT_ROOT=./runtime node server/index.mjs",
+    "dev": "MYBOX_ROOT=./runtime node server/index.mjs",
     "check": "node --check server/index.mjs"
   },
   "dependencies": {

@@ -176,7 +176,7 @@ async function refreshSubscription(id) {
   const sub = settings.subscriptions.find((s) => s.id === id);
   if (!sub) throw new Error('订阅不存在');
 
-  const res = await fetch(sub.url, { headers: { 'User-Agent': 'boxpilot/0.1' }, redirect: 'follow' });
+  const res = await fetch(sub.url, { headers: { 'User-Agent': 'mybox/0.1' }, redirect: 'follow' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const text = await res.text();
 
@@ -357,7 +357,7 @@ app.use((err, req, res, _next) => {
 /* -------------------------------------------------------------- 启动 */
 
 function resolvePort() {
-  const envPort = Number.parseInt(process.env.BOXPILOT_PORT || '', 10);
+  const envPort = Number.parseInt(process.env.MYBOX_PORT || '', 10);
   if (Number.isFinite(envPort)) return envPort;
   const saved = Number.parseInt(fs.readFileSync(PORT_FILE, 'utf8').trim(), 10);
   return Number.isFinite(saved) ? saved : DEFAULT_PANEL_PORT;
@@ -372,12 +372,12 @@ function portProblem(port) {
 const port = resolvePort();
 const problem = portProblem(port);
 if (problem) {
-  log.error('%s（可用 BOXPILOT_PORT 指定其它端口）', problem);
+  log.error('%s（可用 MYBOX_PORT 指定其它端口）', problem);
   process.exit(1);
 }
 
 const server = app.listen(port, '0.0.0.0', () => {
-  log.info('BoxPilot 面板已启动：http://0.0.0.0:%d', port);
+  log.info('MyBox 面板已启动：http://0.0.0.0:%d', port);
   if (!isPasswordSet()) log.warn('还没有设置面板密码，请打开面板完成初始化');
 });
 

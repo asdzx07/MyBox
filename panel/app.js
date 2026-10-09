@@ -1,4 +1,4 @@
-/* BoxPilot 面板 —— 无构建步骤，直接跑。 */
+/* MyBox 面板 —— 无构建步骤，直接跑。 */
 
 const $ = (id) => document.getElementById(id);
 

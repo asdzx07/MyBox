@@ -1,14 +1,14 @@
 [Unit]
-Description=BoxPilot sing-box 内核（官方原版）
-Documentation=https://github.com/asdzx07/boxpilot
-After=network-online.target boxpilot-panel.service
+Description=MyBox sing-box 内核（官方原版）
+Documentation=https://github.com/asdzx07/mybox
+After=network-online.target mybox-panel.service
 Wants=network-online.target
 StartLimitIntervalSec=3600
 StartLimitBurst=5
 
 [Service]
 Type=simple
-ExecStart=/opt/boxpilot/bin/sing-box run -c /opt/boxpilot/etc/config.json -D /opt/boxpilot/data
+ExecStart=/opt/mybox/bin/sing-box run -c /opt/mybox/etc/config.json -D /opt/mybox/data
 Restart=on-failure
 RestartSec=5
 # 让内核收到 SIGTERM 后能正常收尾（关 tun、清路由），超时才强杀
