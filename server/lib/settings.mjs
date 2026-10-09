@@ -50,28 +50,6 @@ export const DEFAULT_POLICIES = [
   { id: 'p-cnip', name: '国内IP', enabled: true, rulesets: ['geoip-cn'], domain: [], domainSuffix: [], ipCidr: [], target: 'builtin-direct' },
 ];
 
-/**
- * 官方 rule-set 仓库里确认存在的 tag（写代码时逐个 HEAD 验证过）。
- *
- * 为什么需要这个：sing-box 启动时如果某个 rule-set 拉不到（404），会直接
- * FATAL 起不来。Open-Box 用的是自带的 geodata（含 geosite-gfw 这类自定义
- * tag），换到官方仓库就 404 了。部署前先照这张表检查，比让内核崩循环好排查。
- *
- * 新增 tag 前先确认 URL 真的能下下来：
- *   curl -I https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/<tag>.srs
- */
-export const KNOWN_RULESET_TAGS = new Set([
-  // sing-geosite
-  'geosite-category-ai-!cn', 'geosite-youtube', 'geosite-tiktok', 'geosite-tiktok@!cn',
-  'geosite-netflix', 'geosite-github', 'geosite-google', 'geosite-microsoft',
-  'geosite-apple', 'geosite-steam', 'geosite-sony', 'geosite-cn',
-  'geosite-geolocation-!cn', 'geosite-telegram', 'geosite-twitter', 'geosite-disney',
-  'geosite-openai', 'geosite-category-games', 'geosite-category-ads-all',
-  // sing-geoip
-  'geoip-cn', 'geoip-private', 'geoip-telegram', 'geoip-google', 'geoip-cloudflare',
-  'geoip-facebook', 'geoip-twitter', 'geoip-netflix',
-]);
-
 export function defaultSettings() {
   return {
     panel: {

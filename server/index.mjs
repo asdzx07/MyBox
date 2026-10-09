@@ -1,9 +1,10 @@
 import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
-  ROOT, PANEL_DIR, DATA_DIR, DEFAULT_PANEL_PORT, PORT_FILE, KERNEL, RESERVED_PORTS,
+  ROOT, DATA_DIR, DEFAULT_PANEL_PORT, PORT_FILE, KERNEL, RESERVED_PORTS,
 } from './lib/paths.mjs';
 import { createLogger } from './lib/log.mjs';
 import { ensureDirs } from './lib/fsx.mjs';
@@ -19,6 +20,7 @@ import * as deploy from './lib/deploy.mjs';
 import * as netstack from './lib/netstack.mjs';
 import * as platform from './lib/platform.mjs';
 import { flipTag } from './lib/flip.mjs';
+import { loadSavedClients, saveClients, scanLocalNetworkClients } from './lib/clients.mjs';
 
 const log = createLogger('panel');
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -124,11 +126,45 @@ app.get('/api/settings', async (req, res) => {
 app.put('/api/settings', (req, res) => {
   const incoming = req.body || {};
   const current = loadSettings({ force: true });
-  // 只接受已知的顶层区块，防止把任意字段写进配置
+  // 接受已知的顶层区块，防止把任意字段写进配置
   for (const key of ['kernel', 'network', 'dns', 'meta']) {
     if (incoming[key] && typeof incoming[key] === 'object') {
       current[key] = { ...current[key], ...incoming[key] };
     }
+  }
+  // 兼容直接通过 settings 接口保存 groups
+  if (Array.isArray(incoming.groups)) {
+    current.groups = incoming.groups.map((g) => ({
+      id: String(g.id || newId('grp')),
+      name: String(g.name || '未命名').trim(),
+      type: String(g.type || 'selector').toLowerCase() === 'urltest' ? 'urltest' : 'selector',
+      enabled: g.enabled !== false,
+      mode: g.mode === 'dynamic' ? 'dynamic' : 'static',
+      members: Array.isArray(g.members) ? g.members.map(String) : [],
+      keywords: Array.isArray(g.keywords) ? g.keywords.map(String) : [],
+      interval: g.interval || '300s',
+      tolerance: Number(g.tolerance) || 100,
+      idleTimeout: g.idleTimeout || '12h',
+      default: g.default ? String(g.default) : undefined,
+    }));
+  }
+  // 兼容直接通过 settings 接口保存 policies
+  if (Array.isArray(incoming.policies)) {
+    current.policies = incoming.policies.map((p) => {
+      let tgt = String(p.target || 'builtin-direct');
+      if (tgt === 'direct') tgt = 'builtin-direct';
+      if (tgt === 'block') tgt = 'builtin-block';
+      return {
+        id: String(p.id || newId('pol')),
+        name: String(p.name || '未命名').trim(),
+        enabled: p.enabled !== false,
+        rulesets: Array.isArray(p.rulesets) ? p.rulesets.map(String) : [],
+        domain: Array.isArray(p.domain) ? p.domain.map(String) : [],
+        domainSuffix: Array.isArray(p.domainSuffix) ? p.domainSuffix.map(String) : [],
+        ipCidr: Array.isArray(p.ipCidr) ? p.ipCidr.map(String) : [],
+        target: tgt,
+      };
+    });
   }
   saveSettings(current);
   res.json(sanitize(current));
@@ -303,7 +339,7 @@ app.put('/api/groups', (req, res) => {
   const clean = list.map((g) => ({
     id: String(g.id || newId('grp')),
     name: String(g.name || '未命名').trim(),
-    type: g.type === 'urltest' ? 'urltest' : 'selector',
+    type: String(g.type || 'selector').toLowerCase() === 'urltest' ? 'urltest' : 'selector',
     enabled: g.enabled !== false,
     mode: g.mode === 'dynamic' ? 'dynamic' : 'static',
     members: Array.isArray(g.members) ? g.members.map(String) : [],
@@ -328,7 +364,8 @@ app.get('/api/policies', (req, res) => {
   // 策略里存的是分组 id（改名不会失效），面板显示的是分组名称，这里对齐一下：
   // 返回的 target 统一成 id，前端拿 label 显示。
   const toId = (target) => {
-    if (target === 'builtin-direct' || target === 'builtin-block') return target;
+    if (target === 'builtin-direct' || target === 'direct') return 'builtin-direct';
+    if (target === 'builtin-block' || target === 'block') return 'builtin-block';
     const g = groups.find((x) => x.name === target || x.id === target);
     return g ? g.id : target;
   };
@@ -346,16 +383,21 @@ app.get('/api/policies', (req, res) => {
 app.put('/api/policies', (req, res) => {
   const list = req.body?.policies;
   if (!Array.isArray(list)) return res.status(400).json({ error: 'policies 必须是数组' });
-  const clean = list.map((p) => ({
-    id: String(p.id || newId('pol')),
-    name: String(p.name || '未命名').trim(),
-    enabled: p.enabled !== false,
-    rulesets: Array.isArray(p.rulesets) ? p.rulesets.map(String) : [],
-    domain: Array.isArray(p.domain) ? p.domain.map(String) : [],
-    domainSuffix: Array.isArray(p.domainSuffix) ? p.domainSuffix.map(String) : [],
-    ipCidr: Array.isArray(p.ipCidr) ? p.ipCidr.map(String) : [],
-    target: String(p.target || 'builtin-direct'),
-  }));
+  const clean = list.map((p) => {
+    let tgt = String(p.target || 'builtin-direct');
+    if (tgt === 'direct') tgt = 'builtin-direct';
+    if (tgt === 'block') tgt = 'builtin-block';
+    return {
+      id: String(p.id || newId('pol')),
+      name: String(p.name || '未命名').trim(),
+      enabled: p.enabled !== false,
+      rulesets: Array.isArray(p.rulesets) ? p.rulesets.map(String) : [],
+      domain: Array.isArray(p.domain) ? p.domain.map(String) : [],
+      domainSuffix: Array.isArray(p.domainSuffix) ? p.domainSuffix.map(String) : [],
+      ipCidr: Array.isArray(p.ipCidr) ? p.ipCidr.map(String) : [],
+      target: tgt,
+    };
+  });
   if (clean.some((p) => !p.name)) return res.status(400).json({ error: '策略名不能为空' });
   mutateSettings((s) => {
     s.policies = clean;
@@ -390,9 +432,6 @@ app.post('/api/policies/:id/toggle', (req, res) => {
 app.post('/api/adblock/refresh', async (req, res) => {
   try {
     // 删掉缓存的广告规则集 SRS，重启内核强制重新下载
-    const fs = await import('node:fs');
-    const { DATA_DIR } = await import('./lib/paths.mjs');
-    const path = await import('node:path');
     let deleted = 0;
     for (const dir of [DATA_DIR, '/tmp', process.cwd()]) {
       try {
@@ -414,9 +453,6 @@ app.post('/api/adblock/refresh', async (req, res) => {
 app.post('/api/rulesets/refresh', async (req, res) => {
   try {
     // 删掉所有缓存的远程规则集 SRS（策略用的 geosite/geoip），重启内核强制重新下载
-    const fs = await import('node:fs');
-    const { DATA_DIR } = await import('./lib/paths.mjs');
-    const path = await import('node:path');
     let deleted = 0;
     for (const dir of [DATA_DIR, '/tmp', process.cwd()]) {
       try {
@@ -456,9 +492,6 @@ app.post('/api/teardown', async (req, res) => {
 
 app.get('/api/system/version', async (req, res) => {
   try {
-    const fs = await import('node:fs');
-    const { ROOT } = await import('./lib/paths.mjs');
-    const path = await import('node:path');
     let semver = '1.0.0';
     try {
       const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
@@ -525,11 +558,6 @@ app.get('/api/system/version', async (req, res) => {
 
 app.post('/api/system/update', async (req, res) => {
   try {
-    const { spawn } = await import('node:child_process');
-    const { ROOT } = await import('./lib/paths.mjs');
-    const path = await import('node:path');
-    const fs = await import('node:fs');
-
     const updateScript = path.join(ROOT, 'scripts', 'update.sh');
     const logFile = path.join(ROOT, 'data', 'update.log');
     
@@ -550,9 +578,8 @@ app.post('/api/system/update', async (req, res) => {
       });
       child.unref();
     } catch (spawnErr) {
-      // 兜底直接 exec
-      const { exec } = await import('node:child_process');
-      exec(`${cmd} ${args.map((a) => `"${a}"`).join(' ')} > "${logFile}" 2>&1 &`);
+      log.error('触发更新脚本失败：%s', spawnErr.message);
+      return res.status(500).json({ ok: false, error: spawnErr.message });
     }
 
     log.info('系统更新脚本已触发');
@@ -562,11 +589,8 @@ app.post('/api/system/update', async (req, res) => {
   }
 });
 
-app.get('/api/system/update/log', async (req, res) => {
+app.get('/api/system/update/log', (req, res) => {
   try {
-    const fs = await import('node:fs');
-    const { ROOT } = await import('./lib/paths.mjs');
-    const path = await import('node:path');
     const logFile = path.join(ROOT, 'data', 'update.log');
     if (!fs.existsSync(logFile)) return res.json({ ok: true, log: '' });
     res.json({ ok: true, log: fs.readFileSync(logFile, 'utf8') });
@@ -795,7 +819,6 @@ app.get('/api/nodes/connections', async (req, res) => {
 
 app.get('/api/clients', async (req, res) => {
   try {
-    const { loadSavedClients, scanLocalNetworkClients } = await import('./lib/clients.mjs');
     let clients = loadSavedClients();
     if (!clients.length) {
       clients = await scanLocalNetworkClients();
@@ -808,7 +831,6 @@ app.get('/api/clients', async (req, res) => {
 
 app.post('/api/clients/scan', async (req, res) => {
   try {
-    const { scanLocalNetworkClients } = await import('./lib/clients.mjs');
     const clients = await scanLocalNetworkClients();
     res.json({ ok: true, clients, count: clients.length });
   } catch (err) {
@@ -816,9 +838,8 @@ app.post('/api/clients/scan', async (req, res) => {
   }
 });
 
-app.post('/api/clients', async (req, res) => {
+app.post('/api/clients', (req, res) => {
   try {
-    const { saveClients } = await import('./lib/clients.mjs');
     const clients = req.body?.clients;
     if (!Array.isArray(clients)) return res.status(400).json({ ok: false, error: 'clients 必须是数组' });
     saveClients(clients);
@@ -828,9 +849,8 @@ app.post('/api/clients', async (req, res) => {
   }
 });
 
-app.delete('/api/clients/:id', async (req, res) => {
+app.delete('/api/clients/:id', (req, res) => {
   try {
-    const { loadSavedClients, saveClients } = await import('./lib/clients.mjs');
     const { id } = req.params;
     let list = loadSavedClients();
     list = list.filter((c) => c.id !== id && c.ip !== id);

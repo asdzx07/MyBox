@@ -3,8 +3,9 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
-import { DATA_DIR } from './paths.mjs';
+import { DATA_DIR, KERNEL } from './paths.mjs';
 import { readJson, writeJsonAtomic } from './fsx.mjs';
+import { loadSettings } from './settings.mjs';
 
 const execAsync = promisify(exec);
 export const CLIENTS_PATH = path.join(DATA_DIR, 'clients.json');
@@ -137,19 +138,25 @@ export async function scanLocalNetworkClients() {
 
   // 4. 从 sing-box Clash 实时连接中查找源 IP
   try {
-    const { fetchConnections } = await import('./singbox.mjs');
-    const cData = await fetchConnections();
-    const conns = cData?.connections || [];
-    for (const c of conns) {
-      const src = c.metadata?.sourceIP;
-      if (isPrivateIpv4(src) && src !== '127.0.0.1') {
-        if (!foundMap.has(src)) {
-          foundMap.set(src, {
-            ip: src,
-            mac: '',
-            hostname: '',
-            source: 'active-conn',
-          });
+    const secret = loadSettings().kernel?.clashSecret || '';
+    const res = await fetch(`http://${KERNEL.clashApiHost}:${KERNEL.clashApiPort}/connections`, {
+      headers: secret ? { Authorization: `Bearer ${secret}` } : {},
+      signal: AbortSignal.timeout(1500),
+    });
+    if (res.ok) {
+      const cData = await res.json();
+      const conns = cData?.connections || [];
+      for (const c of conns) {
+        const src = c.metadata?.sourceIP;
+        if (isPrivateIpv4(src) && src !== '127.0.0.1') {
+          if (!foundMap.has(src)) {
+            foundMap.set(src, {
+              ip: src,
+              mac: '',
+              hostname: '',
+              source: 'active-conn',
+            });
+          }
         }
       }
     }
@@ -186,8 +193,8 @@ export async function scanLocalNetworkClients() {
 
   // 按 IP 末段升序排序
   result.sort((a, b) => {
-    const aLast = Number(a.ip.split('.').pop()) || 0;
-    const bLast = Number(b.ip.split('.').pop()) || 0;
+    const aLast = Number(String(a.ip || '').split('.').pop()) || 0;
+    const bLast = Number(String(b.ip || '').split('.').pop()) || 0;
     return aLast - bLast;
   });
 

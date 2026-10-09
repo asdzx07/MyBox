@@ -222,11 +222,17 @@ async function deployInner({ restart = true, skipNetwork = false } = {}) {
   return report;
 }
 
-/** 只切策略，不重新生成配置、不重启内核。 */
+/** 只切策略，不重新生成配置、不重启内核。同时持久化 enabled 状态。 */
 export function togglePolicy(policyId, enabled) {
-  const settings = loadSettings({ force: true });
-  const policy = settings.policies.find((p) => p.id === policyId);
-  if (!policy) throw new Error('策略不存在');
+  let found = false;
+  mutateSettings((s) => {
+    const policy = s.policies.find((p) => p.id === policyId);
+    if (policy) {
+      policy.enabled = Boolean(enabled);
+      found = true;
+    }
+  });
+  if (!found) throw new Error('策略不存在');
   setFlip(policyId, enabled);
   return { id: policyId, tag: flipTag(policyId), enabled };
 }

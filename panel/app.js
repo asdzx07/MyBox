@@ -6,8 +6,6 @@ let state = {
   settings: null,
   groups: [],
   policies: [],
-  targets: [],
-  nodes: [],
   nodeGroups: [],
   nodeList: [],
   latency: {},
@@ -153,7 +151,16 @@ function showApp() {
 
 /* --------------------------------------------------------------- 节点与分组 */
 
-const GROUP_LABEL = { Selector: '手动选择', URLTest: '自动择优', Fallback: '故障转移', LoadBalance: '负载均衡' };
+const GROUP_LABEL = {
+  Selector: '手动选择',
+  URLTest: '自动择优',
+  Fallback: '故障转移',
+  LoadBalance: '负载均衡',
+  selector: '手动选择',
+  urltest: '自动择优',
+  fallback: '故障转移',
+  loadbalance: '负载均衡',
+};
 
 async function loadNodes() {
   try {
@@ -531,7 +538,6 @@ window.closeAllConnections = async function() {
   }
 };
 
-/* --------------------------------------------------------------- 内网分流 (NEW) */
 /* --------------------------------------------------------------- 内网分流 */
 
 async function loadClients() {
@@ -705,8 +711,7 @@ function renderSubList(subs) {
 
 async function loadGroups() {
   try {
-    const data = await api('/settings');
-    state.settings = data;
+    const data = await api('/groups');
     state.groups = data.groups || [];
     renderGroups();
   } catch (err) {
@@ -720,35 +725,53 @@ function renderGroups() {
     box.innerHTML = '<p class="note">还没有分组规则配置。</p>';
     return;
   }
-  box.innerHTML = state.groups.map((g, i) => `
+  box.innerHTML = state.groups.map((g, i) => {
+    const isBuiltin = g.id === 'all-auto' || g.id === 'all-manual';
+    const typeKey = String(g.type || '').toLowerCase();
+    const typeText = typeKey === 'urltest' ? '自动择优' : '手动选择';
+    return `
     <div class="card" style="background:var(--surface-2);margin-bottom:10px">
-      <div class="row">
+      <div class="row" style="align-items:flex-end">
         <label class="field" style="flex:1 1 140px">
           <span>分组名称</span>
           <input data-g-name="${i}" value="${escapeHtml(g.name || '')}">
         </label>
         <label class="field" style="flex:1 1 120px">
           <span>类型</span>
-          <input value="${escapeHtml(GROUP_LABEL[g.type] || g.type)}" readonly>
+          <input value="${escapeHtml(typeText)}" readonly>
         </label>
         <label class="field" style="flex:2 1 200px">
-          <span>${g.mode === 'dynamic' ? '匹配关键词（逗号分隔）' : '包含节点'}</span>
+          <span>${g.mode === 'dynamic' ? '匹配关键词（逗号分隔）' : '包含节点（逗号分隔）'}</span>
           <input data-g-members="${i}" value="${escapeHtml((g.mode === 'dynamic' ? g.keywords : g.members)?.join(', ') || '')}">
         </label>
-        <div class="fixed" style="padding-bottom:12px">
-          <label class="inline"><input type="checkbox" data-g-enabled="${i}"${g.enabled ? ' checked' : ''} style="width:auto"> 启用</label>
+        <div class="fixed" style="padding-bottom:10px;display:flex;align-items:center;gap:10px">
+          <label class="inline"><input type="checkbox" data-g-enabled="${i}"${g.enabled !== false ? ' checked' : ''} style="width:auto"> 启用</label>
+          ${isBuiltin ? '' : `<button class="small danger" onclick="removeGroup(${i}, event)" style="padding:4px 8px">删除</button>`}
         </div>
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
+
+window.removeGroup = function(index, event) {
+  if (event) {
+    event.stopPropagation();
+    event.preventDefault();
+  }
+  const g = state.groups[index];
+  if (!g) return;
+  if (!confirm(`确定删除节点分组「${g.name || '未命名'}」吗？`)) return;
+  state.groups.splice(index, 1);
+  renderGroups();
+  toast('已删除分组，记得点击下方「保存分组」生效');
+};
 
 /* --------------------------------------------------------------- 目标分流 */
 
 async function loadPolicies() {
   try {
-    const data = await api('/settings');
-    state.settings = data;
+    const data = await api('/policies');
     state.policies = data.policies || [];
     renderPolicies();
     loadRulesetSubs();
@@ -764,69 +787,77 @@ function policyIcon(name = '') {
   return '🎯 ';
 }
 
+function formatTargetLabel(val) {
+  if (!val) return '—';
+  if (val === 'builtin-direct' || val === 'direct') return '直连';
+  if (val === 'builtin-block' || val === 'block') return '拒绝';
+  if (val === 'all-auto') return '所有-自动';
+  if (val === 'all-manual') return '所有-手动';
+  const found = (state.groups || []).find((g) => g.id === val || g.name === val);
+  if (found) return found.name;
+  return val;
+}
+
 /**
- * 组装策略出口目标的下拉选项 HTML：支持内置出口、节点分组、所有单节点、以及保留现有自定义值
+ * 组装策略出口目标的下拉选项 HTML：支持内置出口、节点分组、所有单节点、以及绝对防回退兜底
  */
 function getTargetOptionsHtml(currentTarget = '') {
+  let matched = false;
+  let html = '';
+
+  // 1. 基础目标
   const builtins = [
     { val: 'all-auto', label: '所有-自动 (自动择优)' },
     { val: 'all-manual', label: '所有-手动 (手动切换)' },
-    { val: 'direct', label: '直连 (direct - 绕过代理)' },
-    { val: 'block', label: '拒绝 (block - 阻止连接)' },
+    { val: 'builtin-direct', label: '直连 (direct - 绕过代理)' },
+    { val: 'builtin-block', label: '拒绝 (block - 阻止连接)' },
   ];
 
-  const groupSet = new Set(['all-auto', 'all-manual', 'direct', 'block', 'builtin-direct', 'builtin-block']);
-  const customGroups = [];
-  for (const g of (state.groups || [])) {
-    if (g.name && !groupSet.has(g.name)) {
-      groupSet.add(g.name);
-      customGroups.push(g.name);
-    }
-  }
-  for (const g of (state.nodeGroups || [])) {
-    if (g.name && !groupSet.has(g.name)) {
-      groupSet.add(g.name);
-      customGroups.push(g.name);
-    }
-  }
-
-  const nodes = (state.nodeList || []).map((n) => n.name).filter(Boolean);
-
-  let html = '<optgroup label="基础目标">';
+  html += '<optgroup label="基础目标">';
   for (const b of builtins) {
-    const isSelected = (b.val === currentTarget)
-      || (b.val === 'direct' && currentTarget === 'builtin-direct')
-      || (b.val === 'block' && currentTarget === 'builtin-block');
-    html += `<option value="${escapeHtml(b.val)}"${isSelected ? ' selected' : ''}>${escapeHtml(b.label)}</option>`;
+    const isSel = (!matched) && (
+      b.val === currentTarget ||
+      (b.val === 'all-auto' && currentTarget === '所有-自动') ||
+      (b.val === 'all-manual' && currentTarget === '所有-手动') ||
+      (b.val === 'builtin-direct' && (currentTarget === 'direct' || currentTarget === 'builtin-direct')) ||
+      (b.val === 'builtin-block' && (currentTarget === 'block' || currentTarget === 'builtin-block'))
+    );
+    if (isSel) matched = true;
+    html += `<option value="${escapeHtml(b.val)}"${isSel ? ' selected' : ''}>${escapeHtml(b.label)}</option>`;
   }
   html += '</optgroup>';
 
-  if (customGroups.length) {
+  // 2. 出站分组 (排除内置的 all-auto 和 all-manual，因基础目标中已包含)
+  const excludeIds = new Set(['all-auto', 'all-manual', 'direct', 'block', 'builtin-direct', 'builtin-block']);
+  const groupItems = (state.groups || []).filter((g) => g && !excludeIds.has(g.id) && !excludeIds.has(g.name));
+
+  if (groupItems.length) {
     html += '<optgroup label="出站分组">';
-    for (const g of customGroups) {
-      html += `<option value="${escapeHtml(g)}"${g === currentTarget ? ' selected' : ''}>${escapeHtml(g)}</option>`;
+    for (const g of groupItems) {
+      const gid = g.id || g.name;
+      const isSel = (!matched) && (currentTarget === g.id || currentTarget === g.name);
+      if (isSel) matched = true;
+      const typeLabel = (g.type === 'urltest' || g.type === 'URLTest') ? '自动' : '手动';
+      html += `<option value="${escapeHtml(gid)}"${isSel ? ' selected' : ''}>${escapeHtml(g.name)} (${typeLabel})</option>`;
     }
     html += '</optgroup>';
   }
 
+  // 3. 单个节点
+  const nodes = (state.nodeList || []).map((n) => n.name).filter(Boolean);
   if (nodes.length) {
     html += '<optgroup label="指定单个节点">';
     for (const n of nodes) {
-      html += `<option value="${escapeHtml(n)}"${n === currentTarget ? ' selected' : ''}>${escapeHtml(n)}</option>`;
+      const isSel = (!matched) && (n === currentTarget);
+      if (isSel) matched = true;
+      html += `<option value="${escapeHtml(n)}"${isSel ? ' selected' : ''}>${escapeHtml(n)}</option>`;
     }
     html += '</optgroup>';
   }
 
-  // 兜底保留：如果已有值不在列表中，不丢失配置
-  const allKnown = new Set([
-    ...builtins.map((b) => b.val),
-    'builtin-direct',
-    'builtin-block',
-    ...customGroups,
-    ...nodes,
-  ]);
-  if (currentTarget && !allKnown.has(currentTarget)) {
-    html += `<optgroup label="当前配置"><option value="${escapeHtml(currentTarget)}" selected>${escapeHtml(currentTarget)}</option></optgroup>`;
+  // 4. 防御性兜底：若前序均未匹配，且 currentTarget 非空，强制将其插入作为选中项，彻底杜绝浏览器回退到首项
+  if (!matched && currentTarget) {
+    html = `<optgroup label="当前配置"><option value="${escapeHtml(currentTarget)}" selected>${escapeHtml(formatTargetLabel(currentTarget))}</option></optgroup>` + html;
   }
 
   return html;
@@ -849,7 +880,7 @@ function renderPolicies() {
         <span class="chevron">${collapsed ? '▸' : '▾'}</span>
         <h3 style="display:flex;align-items:center;gap:6px">${policyIcon(p.name)}${escapeHtml(p.name)}</h3>
         <span class="tag muted" data-p-status="${i}">${p.enabled ? '已启用' : '已关闭'}</span>
-        <span class="note" style="font-size:12px;margin-left:6px">出口：<strong style="color:var(--accent)" id="policyTargetLabel-${i}">${escapeHtml(targetVal)}</strong></span>
+        <span class="note" style="font-size:12px;margin-left:6px">出口：<strong style="color:var(--accent)" id="policyTargetLabel-${i}">${escapeHtml(formatTargetLabel(targetVal))}</strong></span>
         <div class="spacer"></div>
         <label class="switch" onclick="event.stopPropagation()">
           <input type="checkbox" data-p-enabled="${i}"${p.enabled ? ' checked' : ''}>
@@ -884,7 +915,7 @@ window.updatePolicyTarget = function(index, val) {
   if (state.policies[index]) {
     state.policies[index].target = val;
     const labelEl = $(`policyTargetLabel-${index}`);
-    if (labelEl) labelEl.textContent = val;
+    if (labelEl) labelEl.textContent = formatTargetLabel(val);
   }
 };
 
@@ -1031,7 +1062,6 @@ async function loadSettings() {
     if ($('sysVersion')) $('sysVersion').textContent = cur;
     if ($('settingCurrentVerTag')) $('settingCurrentVerTag').textContent = cur;
     if ($('brandVersion')) $('brandVersion').textContent = cur;
-    if ($('sysCommitSha')) $('sysCommitSha').textContent = '';
     if ($('latestSysVersion')) $('latestSysVersion').textContent = v.latest || cur;
     if ($('panelCheckTime')) $('panelCheckTime').textContent = '刚刚检查';
 
@@ -1099,9 +1129,11 @@ async function loadAll() {
     loadOverview(),
     loadSubscriptions(),
     loadGroups(),
-    loadPolicies(),
+    loadNodes(),
     loadSettings(),
   ]);
+  // 必须确保 groups 和 nodes 已经加载完毕，再执行 loadPolicies 渲染下拉选项
+  await loadPolicies();
 }
 
 async function withBusy(button, fn) {
@@ -1145,7 +1177,11 @@ function bindEvents() {
       if (tab === 'connections') await loadConnectionsPage();
       if (tab === 'clients') loadClients();
       if (tab === 'subscriptions') await loadSubscriptions();
-      if (tab === 'policies') await loadPolicies();
+      if (tab === 'policies') {
+        if (!state.groups?.length) await loadGroups();
+        if (!state.nodeList?.length) await loadNodes();
+        await loadPolicies();
+      }
       if (tab === 'settings') { await loadSettings(); await loadKernelLog(); }
       scheduleLogAuto();
     });
@@ -1220,13 +1256,79 @@ function bindEvents() {
 
   // 分组管理
   $('btnAddGroup')?.addEventListener('click', () => {
-    state.groups.push({ name: `自定义组-${state.groups.length + 1}`, type: 'Selector', members: [], enabled: true });
+    const newIdx = state.groups.length + 1;
+    state.groups.push({
+      id: `grp-${Date.now()}`,
+      name: `自定义组-${newIdx}`,
+      type: 'selector',
+      mode: 'dynamic',
+      keywords: [],
+      members: [],
+      enabled: true,
+    });
     renderGroups();
+    toast('已添加新分组，请填写名称和关键词后点击「保存分组」');
   });
+
   $('btnSaveGroups')?.addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
-    await api('/settings', { method: 'PUT', body: { groups: state.groups } });
+    // 强制从 DOM 元素提取所有分组字段的最新输入值
+    document.querySelectorAll('#groupList input[data-g-name]').forEach((input) => {
+      const idx = Number(input.dataset.gName);
+      if (state.groups[idx]) {
+        state.groups[idx].name = input.value.trim();
+      }
+    });
+    document.querySelectorAll('#groupList input[data-g-members]').forEach((input) => {
+      const idx = Number(input.dataset.gMembers);
+      if (state.groups[idx]) {
+        const arr = input.value.split(',').map((s) => s.trim()).filter(Boolean);
+        if (state.groups[idx].mode === 'dynamic') {
+          state.groups[idx].keywords = arr;
+        } else {
+          state.groups[idx].members = arr;
+        }
+      }
+    });
+    document.querySelectorAll('#groupList input[data-g-enabled]').forEach((input) => {
+      const idx = Number(input.dataset.gEnabled);
+      if (state.groups[idx]) {
+        state.groups[idx].enabled = input.checked;
+      }
+    });
+
+    const res = await api('/groups', { method: 'PUT', body: { groups: state.groups } });
+    if (res?.groups) state.groups = res.groups;
+    renderGroups();
+    // 联动刷新策略下拉框中的分组列表
+    if (state.policies?.length) renderPolicies();
     toast('分组已保存，记得「部署配置」生效');
   }));
+
+  $('groupList')?.addEventListener('input', (e) => {
+    const t = e.target;
+    if (t.dataset.gName !== undefined) {
+      const i = Number(t.dataset.gName);
+      if (state.groups[i]) state.groups[i].name = t.value.trim();
+    } else if (t.dataset.gMembers !== undefined) {
+      const i = Number(t.dataset.gMembers);
+      if (state.groups[i]) {
+        const arr = t.value.split(',').map((s) => s.trim()).filter(Boolean);
+        if (state.groups[i].mode === 'dynamic') {
+          state.groups[i].keywords = arr;
+        } else {
+          state.groups[i].members = arr;
+        }
+      }
+    }
+  });
+
+  $('groupList')?.addEventListener('change', (e) => {
+    const t = e.target;
+    if (t.dataset.gEnabled !== undefined) {
+      const i = Number(t.dataset.gEnabled);
+      if (state.groups[i]) state.groups[i].enabled = t.checked;
+    }
+  });
 
   // 内网分流按键与弹窗
   $('btnScanClients')?.addEventListener('click', async (e) => {
@@ -1318,13 +1420,41 @@ function bindEvents() {
 
   // 策略页
   $('btnSavePolicies').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
-    await api('/settings', { method: 'PUT', body: { policies: state.policies } });
-    toast('策略已保存，改动已写入开关或生效');
+    // 强制从 DOM 提取所有策略控件的最新值
+    document.querySelectorAll('#policyList select[data-p-target]').forEach((sel) => {
+      const idx = Number(sel.dataset.pTarget);
+      if (state.policies[idx]) {
+        state.policies[idx].target = sel.value;
+      }
+    });
+    document.querySelectorAll('#policyList input[data-p-name]').forEach((input) => {
+      const idx = Number(input.dataset.pName);
+      if (state.policies[idx]) {
+        state.policies[idx].name = input.value.trim();
+      }
+    });
+    document.querySelectorAll('#policyList input[data-p-rulesets]').forEach((input) => {
+      const idx = Number(input.dataset.pRulesets);
+      if (state.policies[idx]) {
+        state.policies[idx].rulesets = input.value.split(',').map((s) => s.trim()).filter(Boolean);
+      }
+    });
+    document.querySelectorAll('#policyList input[data-p-suffix]').forEach((input) => {
+      const idx = Number(input.dataset.pSuffix);
+      if (state.policies[idx]) {
+        state.policies[idx].domainSuffix = input.value.split(',').map((s) => s.trim()).filter(Boolean);
+      }
+    });
+
+    const res = await api('/policies', { method: 'PUT', body: { policies: state.policies } });
+    if (res?.policies) state.policies = res.policies;
+    renderPolicies();
+    toast('策略已保存，改动已写入配置');
   }));
 
   $('btnAddPolicy').addEventListener('click', () => {
     const id = 'custom-' + Date.now();
-    state.policies.push({ id, name: '新策略', target: 'direct', rulesets: [], domainSuffix: [], enabled: true });
+    state.policies.push({ id, name: '新策略', target: 'builtin-direct', rulesets: [], domainSuffix: [], enabled: true });
     renderPolicies();
   });
 
@@ -1349,19 +1479,7 @@ function bindEvents() {
   }));
 
   $('policyList').addEventListener('click', (e) => {
-    // 1. 删除策略
-    const rmBtn = e.target.closest('[data-p-remove]');
-    if (rmBtn) {
-      const idx = Number(rmBtn.dataset.pRemove);
-      const p = state.policies[idx];
-      if (confirm(`确认删除分流策略「${p?.name || '该策略'}」？`)) {
-        state.policies.splice(idx, 1);
-        renderPolicies();
-        toast('已删除策略，记得点击「保存策略」');
-      }
-      return;
-    }
-    // 2. 点击卡片头折叠/展开 (同节点分组效果)
+    // 点击卡片头折叠/展开 (同节点分组效果)
     const collapseEl = e.target.closest('[data-policy-collapse]');
     if (collapseEl && !e.target.closest('.switch') && !e.target.closest('button')) {
       const idx = Number(collapseEl.dataset.policyCollapse);
@@ -1376,9 +1494,6 @@ function bindEvents() {
     if (t.dataset.pName !== undefined) {
       const i = Number(t.dataset.pName);
       if (state.policies[i]) state.policies[i].name = t.value;
-    } else if (t.dataset.pTarget !== undefined) {
-      const i = Number(t.dataset.pTarget);
-      if (state.policies[i]) state.policies[i].target = t.value;
     } else if (t.dataset.pRulesets !== undefined) {
       const i = Number(t.dataset.pRulesets);
       if (state.policies[i]) {
@@ -1480,7 +1595,6 @@ function bindEvents() {
       if ($('sysVersion')) $('sysVersion').textContent = cur;
       if ($('settingCurrentVerTag')) $('settingCurrentVerTag').textContent = cur;
       if ($('brandVersion')) $('brandVersion').textContent = cur;
-      if ($('sysCommitSha')) $('sysCommitSha').textContent = '';
       if ($('latestSysVersion')) $('latestSysVersion').textContent = v.latest || cur;
       if ($('panelCheckTime')) $('panelCheckTime').textContent = '刚刚检查';
 

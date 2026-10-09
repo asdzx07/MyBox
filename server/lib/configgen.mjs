@@ -148,8 +148,8 @@ function directBypassRuleSets(settings) {
  * 跳过——表现就是「Google 打不开」但配置看起来一切正常。
  */
 function resolveTarget(target, settings) {
-  if (target === 'builtin-direct') return DIRECT_TAG;
-  if (target === 'builtin-block') return BLOCK_TAG;
+  if (target === 'builtin-direct' || target === 'direct') return DIRECT_TAG;
+  if (target === 'builtin-block' || target === 'block') return BLOCK_TAG;
   const group = settings.groups.find((g) => g.id === target || g.name === target);
   return group ? group.name : target;
 }

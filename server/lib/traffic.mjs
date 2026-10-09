@@ -27,6 +27,8 @@ let fallbackTimer = null;
 
 // HTTP /connections 轮询记录
 let lastConnTotals = null;
+// Linux tun 网卡轮询记录
+let lastTunTotals = null;
 
 function connectWs() {
   if (ws || !WebSocket) return;
@@ -147,17 +149,19 @@ async function pollFallback() {
           const parts = line.trim().split(/\s+/);
           const rxBytes = Number(parts[1]) || 0;
           const txBytes = Number(parts[9]) || 0;
-          if (lastConnTotals) {
-            const dt = (now - lastConnTotals.at) / 1000;
+          if (lastTunTotals && Number.isFinite(lastTunTotals.rx) && Number.isFinite(lastTunTotals.tx)) {
+            const dt = (now - lastTunTotals.at) / 1000;
             if (dt > 0) {
-              const calcDown = Math.max(0, (rxBytes - lastConnTotals.rx) / dt);
-              const calcUp = Math.max(0, (txBytes - lastConnTotals.tx) / dt);
-              totalDown += Math.max(0, rxBytes - lastConnTotals.rx);
-              totalUp += Math.max(0, txBytes - lastConnTotals.tx);
+              const diffDown = Math.max(0, rxBytes - lastTunTotals.rx);
+              const diffUp = Math.max(0, txBytes - lastTunTotals.tx);
+              const calcDown = diffDown / dt;
+              const calcUp = diffUp / dt;
+              totalDown += diffDown;
+              totalUp += diffUp;
               last = { up: Math.round(calcUp), down: Math.round(calcDown), at: now };
             }
           }
-          lastConnTotals = { rx: rxBytes, tx: txBytes, at: now };
+          lastTunTotals = { rx: rxBytes, tx: txBytes, at: now };
           return;
         }
       }
@@ -177,8 +181,8 @@ export function getTraffic() {
   return {
     up: stale ? 0 : last.up,
     down: stale ? 0 : last.down,
-    totalUp: Math.round(totalUp),
-    totalDown: Math.round(totalDown),
+    totalUp: Number.isFinite(totalUp) ? Math.round(totalUp) : 0,
+    totalDown: Number.isFinite(totalDown) ? Math.round(totalDown) : 0,
     connected: !stale,
   };
 }
@@ -187,4 +191,5 @@ export function resetTrafficTotals() {
   totalUp = 0;
   totalDown = 0;
   lastConnTotals = null;
+  lastTunTotals = null;
 }

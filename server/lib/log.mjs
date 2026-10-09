@@ -1,3 +1,5 @@
+import util from 'node:util';
+
 const LEVELS = { debug: 10, info: 20, warn: 30, error: 40 };
 const CURRENT = LEVELS[process.env.MYBOX_LOG_LEVEL] ?? LEVELS.info;
 
@@ -6,17 +8,8 @@ function emit(level, scope, args) {
   const ts = new Date().toISOString().slice(11, 19);
   const line = `${ts} [${level.toUpperCase().padEnd(5)}] ${scope ? `${scope}: ` : ''}`;
   const stream = level === 'error' || level === 'warn' ? process.stderr : process.stdout;
-  stream.write(line + args.map(fmt).join(' ') + '\n');
-}
-
-function fmt(v) {
-  if (typeof v === 'string') return v;
-  if (v instanceof Error) return `${v.name}: ${v.message}`;
-  try {
-    return JSON.stringify(v);
-  } catch {
-    return String(v);
-  }
+  const msg = util.format(...args);
+  stream.write(line + msg + '\n');
 }
 
 export function createLogger(scope) {

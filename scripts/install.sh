@@ -160,12 +160,13 @@ else
   [ -n "$SRCDIR" ] || die "解包后找不到源码目录"
 fi
 
-for d in server panel system; do
+for d in server panel system tools scripts; do
+  [ -d "$SRCDIR/$d" ] || continue
   rm -rf "$ROOT/$d"
   cp -R "$SRCDIR/$d" "$ROOT/"
 done
 cp "$SRCDIR/package.json" "$ROOT/"
-cp -R "$SRCDIR/scripts" "$ROOT/" 2>/dev/null || true
+[ -f "$SRCDIR/VERSION" ] && cp "$SRCDIR/VERSION" "$ROOT/VERSION" || echo "1.0.0" > "$ROOT/VERSION"
 [ -n "$TMP_SRC" ] && rm -rf "$TMP_SRC"
 
 # ---------------------------------------------------------------- 依赖
