@@ -54,14 +54,76 @@ async function fetchLocal(url, options = {}) {
 async function fetchRemote(path, options = {}) {
   try {
     const res = await fetch(`/remote-api${path}`, options);
+    if (res.status === 401) {
+      showAuthModal();
+      throw new Error('unauthorized');
+    }
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || `HTTP ${res.status}`);
     }
     return await res.json();
   } catch (err) {
+    if (err.message === 'unauthorized') {
+      showAuthModal();
+    }
     console.warn(`请求远程 API 失败 [${path}]:`, err.message);
     throw err;
+  }
+}
+
+/* ------------------------------------------------------------- 身份认证模态框 */
+
+function showAuthModal() {
+  const modal = $('authModal');
+  if (!modal) return;
+  modal.classList.remove('hidden');
+  const errEl = $('authModalError');
+  if (errEl) errEl.classList.add('hidden');
+  setTimeout(() => $('authModalPassword')?.focus(), 80);
+}
+
+function hideAuthModal() {
+  const modal = $('authModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function doLogin(password) {
+  if (!password) {
+    toast('请输入管理密码');
+    return false;
+  }
+  try {
+    toast('正在验证密码并登录旁路由...');
+    const res = await fetch('/remote-api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) {
+      throw new Error(data.error || '密码错误');
+    }
+    // 登录成功，同步给本地服务持久化保存
+    await fetchLocal('/api/local/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    });
+    hideAuthModal();
+    toast('认证成功！节点已同步就绪');
+    await loadGroups();
+    await loadPolicies();
+    await loadConnections();
+    return true;
+  } catch (err) {
+    const errEl = $('authModalError');
+    if (errEl) {
+      errEl.textContent = `登录失败: ${err.message}`;
+      errEl.classList.remove('hidden');
+    }
+    toast(`登录失败: ${err.message}`);
+    return false;
   }
 }
 
@@ -229,7 +291,16 @@ async function loadGroups() {
       </div>
     `).join('');
   } catch (err) {
-    container.innerHTML = `<p class="empty-tip" style="color:var(--danger)">加载节点失败: ${err.message}</p>`;
+    if (err.message === 'unauthorized') {
+      container.innerHTML = `
+        <div style="text-align:center;padding:30px 10px">
+          <p style="font-size:13.5px;color:#4b5563;margin-bottom:12px">旁路由已开启访问密码保护，请先验证密码</p>
+          <button class="small-btn primary" onclick="showAuthModal()" style="padding:7px 18px">输入密码解锁节点</button>
+        </div>
+      `;
+    } else {
+      container.innerHTML = `<p class="empty-tip" style="color:var(--danger)">加载节点失败: ${err.message}</p>`;
+    }
   }
 }
 
@@ -479,6 +550,18 @@ function bindEvents() {
   $('btnOpenWebPanel')?.addEventListener('click', openWebPanel);
   $('btnResetWinNet')?.addEventListener('click', resetWindowsNetwork);
   $('btnExitApp')?.addEventListener('click', exitApplication);
+
+  // 认证弹窗与密码事件
+  $('btnSubmitAuth')?.addEventListener('click', () => {
+    doLogin($('authModalPassword').value.trim());
+  });
+  $('authModalPassword')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') doLogin($('authModalPassword').value.trim());
+  });
+  $('btnCancelAuth')?.addEventListener('click', hideAuthModal);
+  $('btnVerifyPassword')?.addEventListener('click', () => {
+    doLogin($('cfgPanelPassword').value.trim());
+  });
 }
 
 // 初始化
