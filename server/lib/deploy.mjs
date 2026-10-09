@@ -13,17 +13,36 @@ import * as platform from './platform.mjs';
 
 const log = createLogger('deploy');
 
+let deploying = false;
+
+/** 正在部署中。看门狗靠它避让——部署期间内核本来就会短暂停止。 */
+export function isDeploying() {
+  return deploying;
+}
+
 /**
  * 把「设置」落成实际运行状态。顺序很重要：
  *
  *   1. 先把开关文件、规则集写齐 —— 内核启动时要能读到
  *   2. 生成配置写到 candidate，校验通过再原子替换正式配置
- *   3. 配置没问题才动系统网络（dnsmasq / IP 转发）
- *   4. 最后重启内核；内核起不来就回滚 dnsmasq，避免整网无解析
+ *   3. 重启内核（这一步会短暂停一下内核，所以看门狗要避让）
+ *   4. 最后动系统网络（dnsmasq / IP 转发）
+ *
+ * 第 3、4 步的顺序不能反：内核服务的 stop_service 不还原 dnsmasq 了，
+ * 但 restart 本身会经历一次 stop，早期版本因此把刚写好的接管撤销掉过。
  *
  * 任何一步失败都尽量让系统回到「能上网」的状态，而不是半死不活。
  */
 export async function deploy({ restart = true, skipNetwork = false } = {}) {
+  deploying = true;
+  try {
+    return await deployInner({ restart, skipNetwork });
+  } finally {
+    deploying = false;
+  }
+}
+
+async function deployInner({ restart = true, skipNetwork = false } = {}) {
   const settings = loadSettings({ force: true });
   const report = { steps: [], warnings: [], errors: [] };
 

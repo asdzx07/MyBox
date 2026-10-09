@@ -37,14 +37,12 @@ start_service() {
 }
 
 stop_service() {
-	# 停内核前先把 dnsmasq 还给系统。
-	# 否则 dnsmasq 一直指着一个已经死掉的 DNS 端口，全 LAN 无解析——
-	# 这比「代理没起来」严重得多，是必须处理的路径。
-	[ -x "$ROOT/node/bin/node" ] && "$ROOT/node/bin/node" -e '
-		import("'"$ROOT"'/server/lib/netstack.mjs")
-			.then((m) => m.restoreDnsmasq())
-			.catch(() => {});
-	' >/dev/null 2>&1
+	# 这里故意不还原 dnsmasq。
+	#
+	# 还原动作交给面板的看门狗：procd 的 stop 在「重启」时也会被调到，
+	# 如果在这里还原，一次 restart 就会把自己刚写好的接管撤销掉
+	# （部署和升级都会踩到）。看门狗会在内核真的不在时把 dnsmasq 还给系统。
+	:
 }
 
 reload_service() {

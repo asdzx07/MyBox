@@ -390,15 +390,40 @@ const server = app.listen(port, '0.0.0.0', () => {
  * 这比「代理没生效」严重得多。所以内核连续一段时间没响应，就把 dnsmasq 还给系统。
  */
 let kernelDownSince = null;
-const WATCH_INTERVAL = 30000;
-const DOWN_GRACE_MS = 90000;
+let lastReapplyAt = 0;
+const WATCH_INTERVAL = 10000;
+const DOWN_GRACE_MS = 20000;
+const REAPPLY_COOLDOWN_MS = 60000;
 
 const watchdog = setInterval(async () => {
   try {
-    if (await kernel.isResponding()) {
+    // 部署期间内核本来就会短暂停一下，别插手
+    if (deploy.isDeploying()) {
       kernelDownSince = null;
       return;
     }
+
+    if (await kernel.isResponding()) {
+      kernelDownSince = null;
+
+      // 内核活着，但 dnsmasq 没指过来（升级重启、别人改过配置等）→ 补上。
+      // 冷却 60 秒，避免 dnsmasq 起不来时每 10 秒撞一次。
+      const settings = loadSettings();
+      if (settings.dns.mode === 'dnsmasq' && Date.now() - lastReapplyAt > REAPPLY_COOLDOWN_MS) {
+        const dns = await netstack.dnsmasqStatus();
+        if (!dns.takenOver) {
+          lastReapplyAt = Date.now();
+          try {
+            await netstack.applyDnsmasq({ dnsPort: settings.dns.hijackPort });
+            log.info('检测到 dnsmasq 未被接管，已自动接管');
+          } catch (err) {
+            log.warn('自动接管 dnsmasq 失败：%s', err.message);
+          }
+        }
+      }
+      return;
+    }
+
     const st = await kernel.status();
     if (!st.installed) {
       kernelDownSince = null;
@@ -414,6 +439,7 @@ const watchdog = setInterval(async () => {
     if (dns.takenOver) {
       log.warn('内核已停止超过 %d 秒，把 dnsmasq 还给系统，避免全 LAN 无法解析', DOWN_GRACE_MS / 1000);
       await netstack.restoreDnsmasq();
+      lastReapplyAt = Date.now();
     }
     kernelDownSince = null;
   } catch (err) {
