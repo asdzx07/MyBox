@@ -72,19 +72,37 @@ if command -v npm >/dev/null 2>&1; then
   npm install --omit=dev --no-audit --no-fund >/dev/null 2>&1 || say "npm install 有告警，继续"
 fi
 
-say "更新 systemd 单元"
-for unit in mybox-panel mybox-kernel; do
-  [ -f "$ROOT/system/$unit.service" ] && install -m 0644 "$ROOT/system/$unit.service" "/etc/systemd/system/$unit.service"
-done
-systemctl daemon-reload
+if [ -f /etc/openwrt_release ]; then
+  say "更新服务脚本（procd）"
+  for s in mybox-panel mybox-kernel; do
+    [ -f "$ROOT/system/openwrt/initd/$s" ] && install -m 0755 "$ROOT/system/openwrt/initd/$s" "/etc/init.d/$s"
+  done
 
-say "重启面板"
-systemctl restart mybox-panel || die "面板重启失败，代码已备份在 $BACKUP"
+  KERNEL_WAS_RUNNING=0
+  /etc/init.d/mybox-kernel status 2>/dev/null | grep -q running && KERNEL_WAS_RUNNING=1
 
-# 内核如果本来在跑，重启一次让新配置生效
-if systemctl is-active --quiet mybox-kernel; then
-  say "重启内核"
-  systemctl restart mybox-kernel || true
+  say "重启面板"
+  /etc/init.d/mybox-panel restart || die "面板重启失败，代码已备份在 $BACKUP"
+
+  if [ "$KERNEL_WAS_RUNNING" = "1" ]; then
+    say "重启内核"
+    /etc/init.d/mybox-kernel restart || true
+  fi
+else
+  say "更新 systemd 单元"
+  for unit in mybox-panel mybox-kernel; do
+    [ -f "$ROOT/system/$unit.service" ] && install -m 0644 "$ROOT/system/$unit.service" "/etc/systemd/system/$unit.service"
+  done
+  systemctl daemon-reload
+
+  say "重启面板"
+  systemctl restart mybox-panel || die "面板重启失败，代码已备份在 $BACKUP"
+
+  # 内核如果本来在跑，重启一次让新配置生效
+  if systemctl is-active --quiet mybox-kernel; then
+    say "重启内核"
+    systemctl restart mybox-kernel || true
+  fi
 fi
 
 [ -n "${TMP:-}" ] && rm -rf "$TMP"

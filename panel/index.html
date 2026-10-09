@@ -129,8 +129,13 @@
           <label class="inline"><input type="checkbox" id="setIpv6" style="width:auto"> 启用 IPv6</label>
           <label class="inline"><input type="checkbox" id="setRejectQuic" style="width:auto"> 屏蔽 QUIC</label>
           <label class="inline"><input type="checkbox" id="setAutoRedirect" style="width:auto"> nftables 转发（auto_redirect）</label>
+          <label class="inline"><input type="checkbox" id="setDirectBypass" style="width:auto"> 直连不进内核</label>
           <label class="inline"><input type="checkbox" id="setDirectForNodes" style="width:auto"> 节点服务器直连</label>
         </div>
+        <p class="note" style="margin-top:10px">
+          「直连不进内核」把「目标是直连」的策略所涉及的 IP 集合从 tun 路由里排除，
+          这些流量根本不经过内核，直连零开销。
+        </p>
       </div>
 
       <div class="card">

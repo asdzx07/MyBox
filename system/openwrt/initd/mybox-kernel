@@ -1,0 +1,52 @@
+#!/bin/sh /etc/rc.common
+# MyBox sing-box 内核（OpenWrt / iStoreOS，procd 管理）
+#
+# 内核是官方 SagerNet/sing-box 的原版二进制，不做任何修改。
+# 配置由面板生成，面板改完配置后调 `mybox-kernel restart`。
+
+USE_PROCD=1
+START=99
+STOP=10
+
+ROOT=/opt/mybox
+BIN="$ROOT/bin/sing-box"
+CONF="$ROOT/etc/config.json"
+DATA="$ROOT/data"
+
+start_service() {
+	if [ ! -x "$BIN" ]; then
+		logger -t mybox "内核不存在：$BIN（请在面板里安装内核）"
+		return 0
+	fi
+	if [ ! -f "$CONF" ]; then
+		# 没有配置就不起，否则 procd 会一直重启、日志刷屏
+		logger -t mybox "没有配置 $CONF（请在面板里点「部署配置」）"
+		return 0
+	fi
+
+	procd_open_instance
+	procd_set_param command "$BIN" run -c "$CONF" -D "$DATA"
+	# 崩了自动拉起：一小时内最多 5 次
+	procd_set_param respawn 3600 5 5
+	procd_set_param stdout 1
+	procd_set_param stderr 1
+	# 内核收到 SIGTERM 要删自己的 nft 表、关 tun，默认 5 秒不够
+	procd_set_param term_timeout 15
+	procd_set_param limits nofile="65535 65535"
+	procd_close_instance
+}
+
+stop_service() {
+	# 停内核前先把 dnsmasq 还给系统。
+	# 否则 dnsmasq 一直指着一个已经死掉的 DNS 端口，全 LAN 无解析——
+	# 这比「代理没起来」严重得多，是必须处理的路径。
+	[ -x "$ROOT/node/bin/node" ] && "$ROOT/node/bin/node" -e '
+		import("'"$ROOT"'/server/lib/netstack.mjs")
+			.then((m) => m.restoreDnsmasq())
+			.catch(() => {});
+	' >/dev/null 2>&1
+}
+
+reload_service() {
+	restart
+}

@@ -16,7 +16,7 @@ process.env.MYBOX_ROOT ||= path.join(here, '..', 'runtime');
 
 const { ensureDirs, writeJsonAtomic, writeSmallFile } = await import('../server/lib/fsx.mjs');
 const { loadSettings, mutateSettings } = await import('../server/lib/settings.mjs');
-const { generateConfig, buildNodeDirectRuleSet, nodeDirectRuleSetPath } = await import('../server/lib/configgen.mjs');
+const { generateConfig, buildNodeDirectRuleSet, nodeDirectRuleSetPath, buildDirectIpRuleSet, directIpRuleSetPath } = await import('../server/lib/configgen.mjs');
 const { setFlip } = await import('../server/lib/flip.mjs');
 const { CONFIG_PATH, ROOT } = await import('../server/lib/paths.mjs');
 
@@ -72,12 +72,20 @@ for (const p of settings.policies.filter((x) => x.enabled)) setFlip(p.id, true);
 const nodeDirect = buildNodeDirectRuleSet(settings.nodes);
 writeSmallFile(nodeDirectRuleSetPath(), `${JSON.stringify(nodeDirect)}\n`, { mode: 0o644 });
 
-const { config, warnings } = generateConfig(settings);
+if (settings.network.directBypass) {
+  const directIp = buildDirectIpRuleSet(settings);
+  writeSmallFile(directIpRuleSetPath(), `${JSON.stringify(directIp)}\n`, { mode: 0o644 });
+}
+
+const { config, warnings, bypassSets } = generateConfig(settings);
 writeJsonAtomic(CONFIG_PATH, config, { mode: 0o600 });
 
 console.log(`配置已生成：${CONFIG_PATH}`);
 console.log(`  出站 ${config.outbounds.length} 个 · 路由规则 ${config.route.rules.length} 条 · 规则集 ${config.route.rule_set.length} 个`);
 console.log(`  DNS 服务器 ${config.dns.servers.length} 个 · DNS 规则 ${config.dns.rules.length} 条`);
 console.log(`  入站：${config.inbounds.map((i) => `${i.type}/${i.tag}`).join(', ')}`);
+if (bypassSets.length) {
+  console.log(`  直连不进内核：${bypassSets.join(', ')}`);
+}
 if (warnings.length) console.log(`\n提示：\n  - ${warnings.join('\n  - ')}`);
 console.log(`\n下一步校验：\n  ${path.join(ROOT, 'bin', 'sing-box')} check -c ${CONFIG_PATH}`);

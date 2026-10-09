@@ -95,13 +95,35 @@ ERROR router: reload rule-set flip: invalid character 'T' looking for beginning 
 
 ## 安装
 
-Linux（Debian / Ubuntu，systemd）：
+**OpenWrt / iStoreOS**（SSH 以 root 登录后执行）：
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/asdzx07/mybox/main/scripts/install.sh | sh
+```
+
+**Debian / Ubuntu**（systemd）：
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/asdzx07/mybox/main/scripts/install.sh | sudo sh
 ```
 
 装完浏览器打开 `http://<机器IP>:3036`，首次访问设置面板密码。
+
+脚本自己识别平台：OpenWrt 上装 procd 服务、下载 musl 版 Node；
+Debian 上装 systemd 单元、用系统的 Node（没有就 apt 装）。
+内核一律从 SagerNet/sing-box 官方 Release 下载，按平台选 glibc / musl 版。
+
+## 直连不进内核
+
+「国内直连、国外代理」这类用法里，直连的流量本来就不该经过内核。
+MyBox 用 sing-box 原生的 `route_exclude_address_set` 实现：
+
+- 把「目标是直连 / 拒绝」的策略涉及的 IP 集合（`geoip-cn` 等）加上一份
+  私网 CIDR，写成一个本地规则集
+- 塞进 tun 的 `route_exclude_address_set`
+
+结果是内核**不给这些地址建路由**，包根本进不了 tun——不是「进了内核再判定直连」，
+而是压根不进来。省掉的是内核的转发、嗅探和匹配开销。
 
 ## 支持的协议
 
@@ -113,9 +135,11 @@ curl -fsSL https://raw.githubusercontent.com/asdzx07/mybox/main/scripts/install.
 
 - [x] 最小闭环：订阅解析 → 配置生成 → 内核启停
 - [x] 策略热切换（本地 rule-set + fswatch）
-- [x] tun + nftables + ip rule 透明代理
+- [x] tun + nftables 透明代理
 - [x] dnsmasq 接管
-- [ ] OpenWrt / iStoreOS 平台适配（procd + LuCI）
+- [x] OpenWrt / iStoreOS 平台适配（procd）
+- [x] 直连不进内核（`route_exclude_address_set`）
+- [ ] LuCI 兜底页（面板打不开时能启停服务）
 - [ ] 规则集订阅与自动更新
 - [ ] 链式代理、故障转移组
 - [ ] 流量统计

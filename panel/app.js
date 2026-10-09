@@ -120,6 +120,7 @@ async function loadOverview() {
     $('statPolicies').textContent = `${data.counts.policiesEnabled} / ${data.counts.policies}`;
 
     const notes = [];
+    if (data.platform?.label) notes.push(data.platform.label);
     if (data.dnsmasq?.takenOver) notes.push(`dnsmasq 已接管（${data.dnsmasq.confDir}）`);
     if (data.meta?.lastDeployAt) notes.push(`上次部署 ${new Date(data.meta.lastDeployAt).toLocaleString()}`);
     $('overviewNote').textContent = notes.join(' · ');
@@ -252,6 +253,7 @@ function renderSettings() {
   $('setIpv6').checked = Boolean(s.network.ipv6);
   $('setRejectQuic').checked = Boolean(s.network.rejectQuic);
   $('setAutoRedirect').checked = s.network.tun.autoRedirect !== false;
+  $('setDirectBypass').checked = s.network.directBypass !== false;
   $('setDirectForNodes').checked = s.network.directForNodes !== false;
   $('setDnsMode').value = s.dns.mode;
   $('setDnsDirect').value = s.dns.direct === 'wan' ? '' : (s.dns.directAddress || '');
@@ -379,6 +381,7 @@ function bindEvents() {
       network: {
         ipv6: $('setIpv6').checked,
         rejectQuic: $('setRejectQuic').checked,
+        directBypass: $('setDirectBypass').checked,
         directForNodes: $('setDirectForNodes').checked,
         bypassPorts: $('setBypassPorts').value.trim(),
         tun: {

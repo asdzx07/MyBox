@@ -16,12 +16,14 @@ import { parseSubscription, dedupeTags } from './lib/subscription.mjs';
 import * as kernel from './lib/kernel.mjs';
 import * as deploy from './lib/deploy.mjs';
 import * as netstack from './lib/netstack.mjs';
+import * as platform from './lib/platform.mjs';
 import { flipTag } from './lib/flip.mjs';
 
 const log = createLogger('panel');
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 ensureDirs();
+platform.logPlatform();
 
 const app = express();
 app.disable('x-powered-by');
@@ -87,10 +89,11 @@ app.post('/api/auth/change-password', (req, res) => {
 
 app.get('/api/overview', async (req, res) => {
   const settings = loadSettings();
-  const k = kernel.status();
+  const k = await kernel.status();
   res.json({
     kernel: { ...k, versionOutput: await kernel.versionOutput() },
     dnsmasq: await netstack.dnsmasqStatus(),
+    platform: platform.describe(),
     counts: {
       subscriptions: settings.subscriptions.length,
       nodes: settings.nodes.length,
@@ -99,7 +102,6 @@ app.get('/api/overview', async (req, res) => {
       policiesEnabled: settings.policies.filter((p) => p.enabled).length,
     },
     meta: settings.meta,
-    platform: process.platform,
     node: process.version,
   });
 });

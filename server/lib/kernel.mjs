@@ -1,4 +1,4 @@
-import { spawn, execFile } from 'node:child_process';
+import { spawn, execFile, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -7,6 +7,7 @@ import {
 } from './paths.mjs';
 import { readJson, writeJsonAtomic, ensureDirs } from './fsx.mjs';
 import { createLogger } from './log.mjs';
+import * as platform from './platform.mjs';
 
 const execFileAsync = promisify(execFile);
 const log = createLogger('kernel');
@@ -150,15 +151,25 @@ function alive(pid) {
   }
 }
 
-function hasSystemd() {
-  return fs.existsSync('/run/systemd/system');
+/** 有服务管理器就交给它（procd / systemd）；没有（开发机）就直接拉进程。 */
+function supervised() {
+  const p = platform.detect();
+  return (p.id === 'openwrt' || p.id === 'systemd') && platform.hasService(platform.SERVICES.kernel);
 }
 
-async function systemctl(action) {
-  await execFileAsync('systemctl', [action, 'mybox-kernel'], { timeout: 30000 });
-}
-
-export function status() {
+export async function status() {
+  const plat = platform.detect();
+  if (supervised()) {
+    const running = await platform.serviceActive(platform.SERVICES.kernel);
+    return {
+      running,
+      pid: null,
+      version: currentVersion(),
+      installed: installed(),
+      supervisor: plat.supervisor,
+      platform: plat.id,
+    };
+  }
   const pid = readPid();
   const running = alive(pid);
   return {
@@ -166,7 +177,8 @@ export function status() {
     pid: running ? pid : null,
     version: currentVersion(),
     installed: installed(),
-    supervisor: hasSystemd() ? 'systemd' : 'direct',
+    supervisor: 'direct',
+    platform: plat.id,
   };
 }
 
@@ -175,10 +187,12 @@ export async function start() {
   const check = await checkConfig();
   if (!check.ok) throw new Error(`配置校验失败：${check.error}`);
 
-  if (hasSystemd()) {
-    await systemctl('start');
-    // 第一次成功启动后设为开机自启——配置校验已经过了，不会开机崩循环
-    await execFileAsync('systemctl', ['enable', 'mybox-kernel'], { timeout: 15000 }).catch(() => {});
+  if (supervised()) {
+    const r = await platform.serviceControl(platform.SERVICES.kernel, 'start');
+    if (!r.ok) throw new Error(r.out || '服务启动失败');
+    // 第一次成功启动后设为开机自启——配置已经校验过了，不会开机崩循环
+    await platform.serviceEnable(platform.SERVICES.kernel, true);
+    await waitForRunning();
     return status();
   }
 
@@ -195,13 +209,20 @@ export async function start() {
   return status();
 }
 
+/** procd / systemd 的 start 是异步的，轮询一会儿再判定结果。 */
+async function waitForRunning(timeoutMs = 8000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await platform.serviceActive(platform.SERVICES.kernel)) return true;
+    await new Promise((r) => setTimeout(r, 400));
+  }
+  return false;
+}
+
 export async function stop() {
-  if (hasSystemd()) {
-    try {
-      await systemctl('stop');
-    } catch {
-      /* 服务可能本来就没跑 */
-    }
+  if (supervised()) {
+    const r = await platform.serviceControl(platform.SERVICES.kernel, 'stop');
+    if (!r.ok) log.warn('停止内核：%s', r.out);
     return status();
   }
 
@@ -223,11 +244,39 @@ export async function stop() {
 }
 
 export async function restart() {
+  if (supervised()) {
+    const check = await checkConfig();
+    if (!check.ok) throw new Error(`配置校验失败：${check.error}`);
+    const r = await platform.serviceControl(platform.SERVICES.kernel, 'restart');
+    if (!r.ok) throw new Error(r.out || '服务重启失败');
+    await platform.serviceEnable(platform.SERVICES.kernel, true);
+    if (!(await waitForRunning())) {
+      const tail = tailLog(30);
+      throw new Error(`内核启动后没能保持在运行状态${tail ? `\n日志尾部：\n${tail}` : ''}`);
+    }
+    return status();
+  }
+
   await stop();
   return start();
 }
 
 export function tailLog(lines = 200) {
+  const plat = platform.detect();
+  if (supervised() && plat.id === 'systemd') {
+    try {
+      return execFileSync('journalctl', ['-u', platform.SERVICES.kernel, '-n', String(lines), '--no-pager'], { timeout: 10000 }).toString();
+    } catch {
+      return '';
+    }
+  }
+  if (supervised() && plat.id === 'openwrt') {
+    try {
+      return execFileSync('logread', ['-e', 'sing-box'], { timeout: 10000 }).toString();
+    } catch {
+      return '';
+    }
+  }
   try {
     const content = fs.readFileSync(LOG_FILE, 'utf8');
     return content.split('\n').slice(-lines).join('\n');

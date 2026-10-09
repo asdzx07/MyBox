@@ -17,9 +17,14 @@ export function ruleSetUrl(tag) {
 }
 
 export const NODE_DIRECT_RULESET = 'node-direct';
+export const DIRECT_IP_RULESET = 'direct-ip';
 
 export function nodeDirectRuleSetPath() {
   return path.join(RULESET_DIR, `${NODE_DIRECT_RULESET}.json`);
+}
+
+export function directIpRuleSetPath() {
+  return path.join(RULESET_DIR, `${DIRECT_IP_RULESET}.json`);
 }
 
 /** 节点服务器域名直连规则集的内容（本地 source 格式）。 */
@@ -33,6 +38,46 @@ export function buildNodeDirectRuleSet(nodes) {
     version: 3,
     rules: domains.size ? [{ domain: [...domains] }] : [{ domain: ['node-direct.invalid'] }],
   };
+}
+
+const PRIVATE_CIDRS = [
+  '127.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10', '169.254.0.0/16',
+  '172.16.0.0/12', '192.168.0.0/16', '224.0.0.0/4',
+];
+
+/**
+ * 「直连不进内核」用的本地 IP 集合。
+ *
+ * 私网 + 所有「目标是直连/拒绝」的策略里用户手写的 ip_cidr。
+ * 这些地址会被塞进 tun 的 route_exclude_address_set —— 内核对它们
+ * 不建路由，包根本进不了 tun，真正做到零开销直连。
+ */
+export function buildDirectIpRuleSet(settings) {
+  const cidrs = new Set(PRIVATE_CIDRS);
+  for (const p of settings.policies) {
+    if (!p.enabled) continue;
+    const target = resolveTarget(p.target);
+    if (target !== DIRECT_TAG && target !== BLOCK_TAG) continue;
+    for (const c of p.ipCidr || []) cidrs.add(c);
+  }
+  return { version: 3, rules: [{ ip_cidr: [...cidrs] }] };
+}
+
+/**
+ * 收集「不进内核」的规则集 tag。
+ * 只有带 IP 的规则集（geoip-*）才有意义 —— geosite-* 是纯域名，抽不出 IP。
+ */
+function directBypassRuleSets(settings) {
+  const tags = new Set([DIRECT_IP_RULESET]);
+  for (const p of settings.policies) {
+    if (!p.enabled) continue;
+    const target = resolveTarget(p.target);
+    if (target !== DIRECT_TAG && target !== BLOCK_TAG) continue;
+    for (const tag of p.rulesets || []) {
+      if (tag.startsWith('geoip-')) tags.add(tag);
+    }
+  }
+  return [...tags];
 }
 
 /** 策略的 target 可能是内置标记，映射成真实出站 tag。 */
@@ -237,6 +282,11 @@ function buildRoute(settings, names) {
   const ruleSets = [{ type: 'local', tag: NODE_DIRECT_RULESET, format: 'source', path: nodeDirectRuleSetPath() }];
   const seen = new Set([NODE_DIRECT_RULESET]);
 
+  if (network.directBypass) {
+    seen.add(DIRECT_IP_RULESET);
+    ruleSets.push({ type: 'local', tag: DIRECT_IP_RULESET, format: 'source', path: directIpRuleSetPath() });
+  }
+
   for (const p of policies) {
     if (!p.enabled) continue;
 
@@ -273,7 +323,7 @@ function buildRoute(settings, names) {
 
 /* -------------------------------------------------------------- inbounds */
 
-function buildInbounds(settings) {
+function buildInbounds(settings, bypassSets = []) {
   const { network, dns } = settings;
   const inbounds = [];
 
@@ -291,6 +341,9 @@ function buildInbounds(settings) {
         '10.0.0.0/8', '100.64.0.0/10', '169.254.0.0/16', '172.16.0.0/12',
         '192.168.0.0/16', '224.0.0.0/4', '255.255.255.255/32',
       ],
+      // 「直连不进内核」：这些 IP 集合内的目标内核对它们不建路由，
+      // 包进不了 tun，直连零开销。集合来自「目标是直连」的策略。
+      ...(bypassSets.length ? { route_exclude_address_set: bypassSets } : {}),
       dns_mode: 'hijack',
       dns_address: ['172.19.0.2'],
     };
@@ -336,10 +389,12 @@ export function generateConfig(settings) {
   if (!settings.groups.some((g) => g.enabled)) warnings.push('没有启用的节点组：策略没有可用出口。');
   if (!settings.policies.some((p) => p.enabled)) warnings.push('没有启用的策略：所有流量都会走兜底直连。');
 
+  const bypassSets = settings.network.directBypass ? directBypassRuleSets(settings) : [];
+
   const config = {
     log: { level: settings.kernel.logLevel || 'warn', timestamp: true },
     dns: buildDns(settings, names),
-    inbounds: buildInbounds(settings),
+    inbounds: buildInbounds(settings, bypassSets),
     outbounds,
     route: buildRoute(settings, names),
     experimental: {
@@ -352,5 +407,5 @@ export function generateConfig(settings) {
     },
   };
 
-  return { config, warnings };
+  return { config, warnings, bypassSets };
 }

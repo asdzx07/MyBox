@@ -15,8 +15,15 @@ die() { printf '\033[1;31m[x]\033[0m %s\n' "$*" >&2; exit 1; }
 
 [ "$(id -u)" = "0" ] || die "请用 root 运行"
 
-if [ -d /run/systemd/system ]; then
-  say "停止服务"
+if [ -f /etc/openwrt_release ]; then
+  say "停止服务（procd）"
+  /etc/init.d/mybox-kernel stop 2>/dev/null || true
+  /etc/init.d/mybox-panel stop 2>/dev/null || true
+  /etc/init.d/mybox-kernel disable 2>/dev/null || true
+  /etc/init.d/mybox-panel disable 2>/dev/null || true
+  rm -f /etc/init.d/mybox-kernel /etc/init.d/mybox-panel
+elif [ -d /run/systemd/system ]; then
+  say "停止服务（systemd）"
   systemctl stop mybox-kernel 2>/dev/null || true
   systemctl stop mybox-panel 2>/dev/null || true
   systemctl disable mybox-kernel 2>/dev/null || true
@@ -44,14 +51,15 @@ ip link del mybox-tun 2>/dev/null || true
 nft delete table inet mybox 2>/dev/null || true
 
 if [ "$PURGE" = "1" ]; then
-  say "删除 $ROOT（含数据）"
+  say "删除 $ROOT（含数据、内核、Node 运行时）"
   rm -rf "$ROOT"
 else
-  say "保留数据目录，只删程序"
-  for d in server panel system bin etc node_modules package.json package-lock.json; do
+  say "保留数据与运行时，只删程序"
+  # bin/（内核）和 node/（运行时）留着，重装时不用再下一遍
+  for d in server panel system scripts node_modules package.json package-lock.json; do
     rm -rf "$ROOT/$d"
   done
 fi
 
 say "卸载完成"
-[ "$PURGE" = "0" ] && say "订阅与设置保留在 $ROOT/data，重新安装后可直接沿用"
+[ "$PURGE" = "0" ] && say "订阅与设置保留在 $ROOT/data，内核在 $ROOT/bin，重新安装后可直接沿用"

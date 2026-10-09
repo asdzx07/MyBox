@@ -1,14 +1,15 @@
 import fs from 'node:fs';
 import {
-  CONFIG_PATH, CONFIG_CANDIDATE_PATH,
+  CONFIG_PATH, CONFIG_CANDIDATE_PATH, ROOT,
 } from './paths.mjs';
 import { createLogger } from './log.mjs';
 import { loadSettings, mutateSettings } from './settings.mjs';
 import { writeJsonAtomic, writeSmallFile } from './fsx.mjs';
-import { generateConfig, buildNodeDirectRuleSet, nodeDirectRuleSetPath } from './configgen.mjs';
+import { generateConfig, buildNodeDirectRuleSet, nodeDirectRuleSetPath, buildDirectIpRuleSet, directIpRuleSetPath } from './configgen.mjs';
 import { setFlip, flipTag } from './flip.mjs';
 import * as kernel from './kernel.mjs';
 import * as netstack from './netstack.mjs';
+import * as platform from './platform.mjs';
 
 const log = createLogger('deploy');
 
@@ -31,7 +32,15 @@ export async function deploy({ restart = true, skipNetwork = false } = {}) {
     log.info('%s%s', name, detail ? ` — ${detail}` : '');
   };
 
-  // ---- 1. 开关文件 + 节点直连规则集
+  // ---- 0. 确保服务脚本已装（幂等；升级后新脚本能自动生效）
+  try {
+    const installedUnits = await platform.installServiceFiles(ROOT);
+    if (installedUnits.length) step('安装服务脚本', installedUnits.join(', '));
+  } catch (err) {
+    report.warnings.push(`服务脚本安装失败（不影响本次部署）：${err.message}`);
+  }
+
+  // ---- 1. 开关文件 + 规则集
   const activePolicies = settings.policies.filter((p) => p.enabled);
   for (const p of activePolicies) setFlip(p.id, true);
   step('写入策略开关', `${activePolicies.length} 个策略`);
@@ -40,9 +49,16 @@ export async function deploy({ restart = true, skipNetwork = false } = {}) {
   writeSmallFile(nodeDirectRuleSetPath(), `${JSON.stringify(nodeDirect)}\n`, { mode: 0o644 });
   step('写入节点直连规则集', `${(nodeDirect.rules[0].domain || []).length} 个域名`);
 
+  if (settings.network.directBypass) {
+    const directIp = buildDirectIpRuleSet(settings);
+    writeSmallFile(directIpRuleSetPath(), `${JSON.stringify(directIp)}\n`, { mode: 0o644 });
+    step('写入直连 IP 集合', `${(directIp.rules[0].ip_cidr || []).length} 条 CIDR（这些不进内核）`);
+  }
+
   // ---- 2. 生成配置
-  const { config, warnings } = generateConfig(settings);
+  const { config, warnings, bypassSets } = generateConfig(settings);
   report.warnings.push(...warnings);
+  report.bypassSets = bypassSets;
   writeJsonAtomic(CONFIG_CANDIDATE_PATH, config, { mode: 0o600 });
   step('生成候选配置', `${config.outbounds.length} 个出站 / ${config.route.rules.length} 条路由规则`);
 
