@@ -39,6 +39,8 @@ done
 say()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[!]\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31m[x]\033[0m %s\n' "$*" >&2; exit 1; }
+# busybox 没有 install 命令，用 cp + chmod 代替
+put()  { cp "$2" "$3" && chmod "$1" "$3"; }
 
 [ "$(id -u)" = "0" ] || die "请用 root 运行（OpenWrt 直接 root 登录；Debian 用 sudo）"
 
@@ -215,7 +217,7 @@ if [ "$SKIP_KERNEL" = "0" ]; then
     BIN=$(find "$TMP" -type f -name sing-box | head -n 1)
     [ -n "$BIN" ] || die "解包后找不到 sing-box"
     mkdir -p "$ROOT/bin"
-    install -m 0755 "$BIN" "$ROOT/bin/sing-box"
+    put 0755 "$BIN" "$ROOT/bin/sing-box"
     rm -rf "$TMP"
     say "内核已安装：$("$ROOT/bin/sing-box" version | head -n 1)"
   fi
@@ -225,7 +227,7 @@ fi
 say "安装服务脚本"
 if [ "$PLATFORM" = openwrt ]; then
   for s in mybox-panel mybox-kernel; do
-    install -m 0755 "$ROOT/system/openwrt/initd/$s" "/etc/init.d/$s"
+    put 0755 "$ROOT/system/openwrt/initd/$s" "/etc/init.d/$s"
   done
   /etc/init.d/mybox-panel enable >/dev/null 2>&1 || warn "开机自启设置失败"
   /etc/init.d/mybox-panel start >/dev/null 2>&1 || warn "面板启动失败，看 logread -e mybox"
@@ -234,7 +236,7 @@ if [ "$PLATFORM" = openwrt ]; then
   LOGHINT="logread -e mybox"
 else
   for s in mybox-panel mybox-kernel; do
-    [ -f "$ROOT/system/$s.service" ] && install -m 0644 "$ROOT/system/$s.service" "/etc/systemd/system/$s.service"
+    [ -f "$ROOT/system/$s.service" ] && put 0644 "$ROOT/system/$s.service" "/etc/systemd/system/$s.service"
   done
   systemctl daemon-reload
   systemctl enable --now mybox-panel >/dev/null 2>&1 || warn "面板服务启动失败，看 journalctl -u mybox-panel"

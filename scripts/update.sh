@@ -22,6 +22,7 @@ while [ $# -gt 0 ]; do
 done
 
 say()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
+put()  { cp "$2" "$3" && chmod "$1" "$3"; }
 die()  { printf '\033[1;31m[x]\033[0m %s\n' "$*" >&2; exit 1; }
 
 [ "$(id -u)" = "0" ] || die "请用 root 运行"
@@ -75,7 +76,7 @@ fi
 if [ -f /etc/openwrt_release ]; then
   say "更新服务脚本（procd）"
   for s in mybox-panel mybox-kernel; do
-    [ -f "$ROOT/system/openwrt/initd/$s" ] && install -m 0755 "$ROOT/system/openwrt/initd/$s" "/etc/init.d/$s"
+    [ -f "$ROOT/system/openwrt/initd/$s" ] && put 0755 "$ROOT/system/openwrt/initd/$s" "/etc/init.d/$s"
   done
 
   KERNEL_WAS_RUNNING=0
@@ -91,7 +92,7 @@ if [ -f /etc/openwrt_release ]; then
 else
   say "更新 systemd 单元"
   for unit in mybox-panel mybox-kernel; do
-    [ -f "$ROOT/system/$unit.service" ] && install -m 0644 "$ROOT/system/$unit.service" "/etc/systemd/system/$unit.service"
+    [ -f "$ROOT/system/$unit.service" ] && put 0644 "$ROOT/system/$unit.service" "/etc/systemd/system/$unit.service"
   done
   systemctl daemon-reload
 
