@@ -115,11 +115,68 @@ async function globalOptionAlreadySet(option, confDir) {
   return null;
 }
 
+async function uciGet(option) {
+  const r = await run('uci', ['-q', 'get', option]);
+  if (!r.ok || !r.out) return null;
+  return r.out.split('\n').map((s) => s.trim()).filter(Boolean);
+}
+
+async function uciCommit() {
+  return run('uci', ['-q', 'commit', 'dhcp']);
+}
+
+/**
+ * OpenWrt：直接改 uci 的 dnsmasq server 选项。
+ *
+ * 为什么不能只在 conf-dir 里塞一行 server=：uci 里原有的 server（比如别人装的
+ * mosdns 占着 5335）不会消失，dnsmasq 会同时问两个上游，分流就漏了。
+ * 必须把 server 列表整体接管过来，并且把原值备份下来以便还原。
+ */
+async function applyDnsmasqOpenWrt({ dnsPort, listen }) {
+  const section = 'dhcp.@dnsmasq[0]';
+  const before = {
+    server: await uciGet(`${section}.server`),
+    noresolv: await uciGet(`${section}.noresolv`),
+  };
+
+  await run('uci', ['-q', 'delete', `${section}.server`]);
+  await run('uci', ['-q', 'add_list', `${section}.server=${listen}#${dnsPort}`]);
+  await run('uci', ['-q', 'set', `${section}.noresolv=1`]);
+  await uciCommit();
+
+  const restart = await dnsmasqRestart();
+  if (!restart.ok) {
+    // 起不来就回滚，否则整网 DNS 断掉
+    await uciRollbackDnsmasq(before);
+    throw new Error(`dnsmasq 重启失败，已回滚：${restart.out}`);
+  }
+
+  writeJsonAtomic(STATE_FILE, { ...readJson(STATE_FILE, {}), dnsmasq: { mode: 'uci', section, before } });
+  log.info('dnsmasq 已接管（uci）→ %s#%d', listen, dnsPort);
+  return { confDir: 'uci', noresolv: true };
+}
+
+async function uciRollbackDnsmasq(before) {
+  const section = 'dhcp.@dnsmasq[0]';
+  await run('uci', ['-q', 'delete', `${section}.server`]);
+  for (const v of before?.server ?? []) {
+    await run('uci', ['-q', 'add_list', `${section}.server=${v}`]);
+  }
+  if (before?.noresolv?.length) {
+    await run('uci', ['-q', 'set', `${section}.noresolv=${before.noresolv[0]}`]);
+  } else {
+    await run('uci', ['-q', 'delete', `${section}.noresolv`]);
+  }
+  await uciCommit();
+}
+
 /**
  * 接管 dnsmasq：把它的上游指向内核的 DNS 入站。
- * 返回接管详情，失败时抛出——调用方负责回滚。
+ * 失败时抛错并回滚——调用方负责记录。
  */
 export async function applyDnsmasq({ dnsPort = KERNEL.dnsPort, listen = '127.0.0.1' } = {}) {
+  if (isOpenWrt()) return applyDnsmasqOpenWrt({ dnsPort, listen });
+
   const confDir = await dnsmasqConfDir();
   fs.mkdirSync(confDir, { recursive: true });
 
@@ -139,32 +196,35 @@ export async function applyDnsmasq({ dnsPort = KERNEL.dnsPort, listen = '127.0.0
 
   const restart = await dnsmasqRestart();
   if (!restart.ok) {
-    // 起不来就回滚，否则整网 DNS 断掉
     if (before === null) fs.rmSync(target, { force: true });
     else fs.writeFileSync(target, before);
     await dnsmasqRestart();
     throw new Error(`dnsmasq 重启失败，已回滚：${restart.out}`);
   }
 
-  writeJsonAtomic(STATE_FILE, { ...readJson(STATE_FILE, {}), dnsmasq: { confDir, file: target, before } });
+  writeJsonAtomic(STATE_FILE, { ...readJson(STATE_FILE, {}), dnsmasq: { mode: 'confdir', confDir, file: target, before } });
   log.info('dnsmasq 已接管 → %s#%d', listen, dnsPort);
   return { confDir, file: target, noresolv: !conflict };
 }
 
-/** 还原 dnsmasq。内核起不来时必须调这个，否则整网无解析。 */
+/** 还原 dnsmasq。内核起不来或卸载时必须调这个，否则整网无解析。 */
 export async function restoreDnsmasq() {
   const state = readJson(STATE_FILE, {})?.dnsmasq;
-  if (!state?.file) return { restored: false };
+  if (!state) return { restored: false };
+
   try {
-    if (state.before === null || state.before === undefined) {
-      fs.rmSync(state.file, { force: true });
-    } else {
-      fs.writeFileSync(state.file, state.before);
+    if (state.mode === 'uci') {
+      await uciRollbackDnsmasq(state.before);
+      await dnsmasqRestart();
+    } else if (state.file) {
+      if (state.before === null || state.before === undefined) fs.rmSync(state.file, { force: true });
+      else fs.writeFileSync(state.file, state.before);
+      await dnsmasqRestart();
     }
-    await dnsmasqRestart();
   } catch (err) {
     log.error('还原 dnsmasq 失败：%s', err.message);
   }
+
   const next = readJson(STATE_FILE, {});
   delete next.dnsmasq;
   writeJsonAtomic(STATE_FILE, next);
@@ -206,6 +266,14 @@ export async function cleanup() {
 
 export async function dnsmasqStatus() {
   const state = readJson(STATE_FILE, {})?.dnsmasq;
-  if (!state?.file) return { takenOver: false };
-  return { takenOver: fs.existsSync(state.file), confDir: state.confDir, file: state.file };
+  if (!state) return { takenOver: false };
+  if (state.mode === 'uci') {
+    const servers = await uciGet('dhcp.@dnsmasq[0].server');
+    return {
+      takenOver: Boolean(servers?.some((s) => s.includes(`#${KERNEL.dnsPort}`))),
+      confDir: 'uci',
+      servers: servers ?? [],
+    };
+  }
+  return { takenOver: Boolean(state.file && fs.existsSync(state.file)), confDir: state.confDir, file: state.file };
 }

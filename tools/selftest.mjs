@@ -66,6 +66,8 @@ mutateSettings((s) => {
   s.nodes = SAMPLE_NODES.map((n) => ({ ...n, __subscriptionId: 'sub-sample' }));
   s.subscriptions = [{ id: 'sub-sample', name: '样例订阅', url: 'https://example.com/sub', enabled: true, nodeCount: SAMPLE_NODES.length }];
   s.groups[0].members = SAMPLE_NODES.map((n) => n.tag);
+  // 非 Linux 上建不出 tun，冒烟测试跑不起来，本地只验配置生成
+  if (process.platform !== 'linux') s.network.tun.enabled = false;
 });
 
 const settings = loadSettings({ force: true });
@@ -90,4 +92,53 @@ if (bypassSets.length) {
   console.log(`  直连不进内核：${bypassSets.join(', ')}`);
 }
 if (warnings.length) console.log(`\n提示：\n  - ${warnings.join('\n  - ')}`);
-console.log(`\n下一步校验：\n  ${path.join(ROOT, 'bin', 'sing-box')} check -c ${CONFIG_PATH}`);
+const smoke = process.argv.includes('--smoke');
+
+if (smoke) {
+  // 冒烟测试：真的把内核拉起来几秒，看它会不会 FATAL。
+  // sing-box check 只解析配置，抓不到「空 direct 出站」这类只在启动阶段才暴露的错误。
+  const { spawn } = await import('node:child_process');
+  const bin = process.platform === 'win32'
+    ? path.join(ROOT, 'bin', 'sing-box.exe')
+    : path.join(ROOT, 'bin', 'sing-box');
+
+  if (!fs.existsSync(bin)) {
+    console.log(`\n跳过冒烟测试：找不到内核 ${bin}`);
+  } else {
+    console.log('\n冒烟测试：启动内核 6 秒…');
+    const child = spawn(bin, ['run', '-c', CONFIG_PATH, '-D', path.join(ROOT, 'data')], {
+      cwd: ROOT,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let output = '';
+    child.stdout.on('data', (d) => { output += d.toString(); });
+    child.stderr.on('data', (d) => { output += d.toString(); });
+
+    const exited = await new Promise((resolve) => {
+      const timer = setTimeout(() => resolve(null), 6000);
+      child.on('exit', (code) => { clearTimeout(timer); resolve(code); });
+    });
+    child.kill('SIGTERM');
+    await new Promise((r) => setTimeout(r, 500));
+
+    const fatal = output.split('\n').filter((l) => /FATAL|panic/.test(l));
+    const errors = output.split('\n').filter((l) => /ERROR/.test(l));
+    if (exited !== null && exited !== 0) {
+      console.log(`  ✗ 内核提前退出（code=${exited}）`);
+      console.log(fatal.length ? fatal.map((l) => `    ${l}`).join('\n') : output.trim());
+      process.exitCode = 1;
+    } else if (fatal.length) {
+      console.log('  ✗ 启动阶段 FATAL：');
+      console.log(fatal.map((l) => `    ${l}`).join('\n'));
+      process.exitCode = 1;
+    } else {
+      console.log('  ✓ 内核启动正常，没有 FATAL');
+      if (errors.length) {
+        console.log(`  （${errors.length} 条 ERROR，通常是规则集下载失败，不影响结论）`);
+        console.log(errors.slice(0, 3).map((l) => `    ${l}`).join('\n'));
+      }
+    }
+  }
+}
+
+console.log(`\n配置校验：\n  ${path.join(ROOT, 'bin', 'sing-box')} check -c ${CONFIG_PATH}`);

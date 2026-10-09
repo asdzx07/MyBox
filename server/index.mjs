@@ -383,8 +383,48 @@ const server = app.listen(port, '0.0.0.0', () => {
   if (!isPasswordSet()) log.warn('还没有设置面板密码，请打开面板完成初始化');
 });
 
+/**
+ * 内核看门狗。
+ *
+ * dnsmasq 被接管后一直指着内核的 DNS 端口。内核一旦不在，整个局域网就查不到域名——
+ * 这比「代理没生效」严重得多。所以内核连续一段时间没响应，就把 dnsmasq 还给系统。
+ */
+let kernelDownSince = null;
+const WATCH_INTERVAL = 30000;
+const DOWN_GRACE_MS = 90000;
+
+const watchdog = setInterval(async () => {
+  try {
+    if (await kernel.isResponding()) {
+      kernelDownSince = null;
+      return;
+    }
+    const st = await kernel.status();
+    if (!st.installed) {
+      kernelDownSince = null;
+      return;
+    }
+    if (!kernelDownSince) {
+      kernelDownSince = Date.now();
+      return;
+    }
+    if (Date.now() - kernelDownSince < DOWN_GRACE_MS) return;
+
+    const dns = await netstack.dnsmasqStatus();
+    if (dns.takenOver) {
+      log.warn('内核已停止超过 %d 秒，把 dnsmasq 还给系统，避免全 LAN 无法解析', DOWN_GRACE_MS / 1000);
+      await netstack.restoreDnsmasq();
+    }
+    kernelDownSince = null;
+  } catch (err) {
+    log.debug('看门狗检查失败：%s', err.message);
+  }
+}, WATCH_INTERVAL);
+watchdog.unref?.();
+
 function shutdown(signal) {
   log.info('收到 %s，正在退出', signal);
+  clearInterval(watchdog);
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 3000);
 }

@@ -81,30 +81,31 @@ export async function deploy({ restart = true, skipNetwork = false } = {}) {
   fs.renameSync(CONFIG_CANDIDATE_PATH, CONFIG_PATH);
   step('应用配置');
 
-  // ---- 4. 系统网络
-  if (!skipNetwork) {
-    const netResult = await netstack.apply(settings);
-    report.warnings.push(...netResult.warnings);
-    step('系统网络', netResult.dnsmasq ? `dnsmasq 已接管（${netResult.dnsmasq.confDir}）` : `DNS 模式 ${settings.dns.mode}`);
-  }
-
-  // ---- 5. 内核
+  // ---- 4. 内核
+  //
+  // 必须先重启内核、再动系统网络。反过来的话：内核服务的 stop_service 里
+  // 会还原 dnsmasq（防止内核挂了整网无解析），而 restart 正好包含一次 stop——
+  // 刚写好的接管会被自己撤销掉。
   if (restart) {
     try {
       await kernel.restart();
       step('重启内核', '已启动');
     } catch (err) {
-      // 内核起不来 = 代理没生效。此时必须把 dnsmasq 还给系统，
-      // 否则 dnsmasq 一直指着一个死掉的 DNS 端口，全 LAN 无解析。
       log.error('内核启动失败：%s', err.message);
       if (previousConfig) fs.writeFileSync(CONFIG_PATH, previousConfig);
-      await netstack.restoreDnsmasq();
       report.errors.push(`内核启动失败：${err.message}`);
       mutateSettings((s) => {
         s.meta.lastDeployError = err.message;
       });
-      throw new Error(`内核启动失败，已回滚 DNS 接管：${err.message}`);
+      throw new Error(`内核启动失败，配置已回滚：${err.message}`);
     }
+  }
+
+  // ---- 5. 系统网络（IP 转发 + dnsmasq 接管）
+  if (!skipNetwork) {
+    const netResult = await netstack.apply(settings);
+    report.warnings.push(...netResult.warnings);
+    step('系统网络', netResult.dnsmasq ? `dnsmasq 已接管（${netResult.dnsmasq.confDir}）` : `DNS 模式 ${settings.dns.mode}`);
   }
 
   mutateSettings((s) => {

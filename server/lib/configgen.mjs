@@ -8,6 +8,18 @@ const GEOIP_BASE = 'https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-s
 
 export const DIRECT_TAG = '直连';
 export const BLOCK_TAG = '拒绝';
+/**
+ * 兜底出站。
+ *
+ * 为什么不能直接让 `route.final` 指向「直连」：sing-box 的 detour 校验里，
+ * 如果解析到的默认出站是一个「空的 direct 出站」，会直接 FATAL——
+ * 见 common/dialer/detour.go 的 "detour to an empty direct outbound makes no sense"。
+ * DNS 服务器没写 detour 时会去取默认出站，于是整份配置起不来。
+ *
+ * 所以固定放一个 selector 当兜底：它本身不是 direct 出站，校验通过；
+ * 默认成员是「直连」，行为上和 final=直连 一样。
+ */
+export const FALLBACK_TAG = '兜底';
 
 /** 规则集 tag → 官方 rule-set 仓库地址。 */
 export function ruleSetUrl(tag) {
@@ -165,6 +177,18 @@ function buildOutbounds(settings) {
     tags.add(g.name);
   }
 
+  // 兜底 selector：route.final 指向它，默认走直连。
+  // 见 FALLBACK_TAG 的注释——不能让 final 直接指向空的 direct 出站。
+  const fallbackMembers = [DIRECT_TAG, BLOCK_TAG, ...settings.groups.filter((g) => g.enabled).map((g) => g.name)]
+    .filter((t, i, arr) => tags.has(t) && arr.indexOf(t) === i);
+  outbounds.push({
+    type: 'selector',
+    tag: FALLBACK_TAG,
+    outbounds: fallbackMembers.length ? fallbackMembers : [DIRECT_TAG],
+    default: DIRECT_TAG,
+  });
+  tags.add(FALLBACK_TAG);
+
   return { outbounds, names: tags, nodeTags };
 }
 
@@ -173,11 +197,12 @@ function buildOutbounds(settings) {
 function buildDns(settings, names) {
   const { dns, network } = settings;
 
-  // 代理 DNS 需要一个出口：优先第一个自动择优组，否则直连
+  // 代理 DNS 需要一个出口：优先第一个自动择优组，否则任意启用的组，最后兜底。
+  // 不能落到「直连」——那是个空 direct 出站，detour 校验会 FATAL。
   const proxyDetour = settings.groups.find((g) => g.enabled && g.type === 'urltest')?.name
     || settings.groups.find((g) => g.enabled)?.name
-    || DIRECT_TAG;
-  const effectiveProxyDetour = names.has(proxyDetour) ? proxyDetour : DIRECT_TAG;
+    || FALLBACK_TAG;
+  const effectiveProxyDetour = names.has(proxyDetour) ? proxyDetour : FALLBACK_TAG;
 
   const proxyServerTag = dns.fakeIp ? 'dns-fakeip' : 'dns-proxy';
 
@@ -187,7 +212,8 @@ function buildDns(settings, names) {
       tag: 'dns-direct',
       server: dns.direct === 'wan' ? '223.5.5.5' : (dns.directAddress || '223.5.5.5'),
       server_port: Number(dns.directPort) || 53,
-      detour: DIRECT_TAG,
+      // 故意不写 detour：直连 DNS 走默认出站即可。
+      // 写 detour: '直连' 会命中 sing-box 的「空 direct 出站」校验直接 FATAL。
     },
     {
       type: dns.proxyProtocol || 'tcp',
@@ -220,7 +246,14 @@ function buildDns(settings, names) {
   if (dns.split) {
     for (const p of settings.policies) {
       if (!p.enabled) continue;
-      const conditions = policyConditions(p);
+
+      // DNS 分流只按域名来。IP 型规则集（geoip-*）不能出现在 DNS 规则里：
+      // sing-box 1.14 起把 DNS 规则里的地址匹配字段标记为弃用，用了会直接 FATAL。
+      const conditions = [];
+      const domainSets = (p.rulesets || []).filter((t) => t.startsWith('geosite-'));
+      if (domainSets.length) conditions.push({ rule_set: domainSets });
+      if (p.domain?.length) conditions.push({ domain: [...p.domain] });
+      if (p.domainSuffix?.length) conditions.push({ domain_suffix: [...p.domainSuffix] });
       if (!conditions.length) continue;
 
       const target = resolveTarget(p.target);
@@ -338,7 +371,9 @@ function buildRoute(settings, names) {
   return {
     rules,
     rule_set: ruleSets,
-    final: DIRECT_TAG,
+    // 兜底走 selector 而不是直接写「直连」——空的 direct 出站会让 DNS 的
+    // detour 校验失败，整份配置起不来（见 FALLBACK_TAG 的注释）
+    final: names.has(FALLBACK_TAG) ? FALLBACK_TAG : DIRECT_TAG,
     auto_detect_interface: true,
     default_domain_resolver: { server: 'dns-direct' },
   };

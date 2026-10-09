@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import {
-  BIN_DIR, SINGBOX_BIN, CONFIG_PATH, DATA_DIR, VERSION_FILE,
+  BIN_DIR, SINGBOX_BIN, CONFIG_PATH, DATA_DIR, VERSION_FILE, KERNEL,
 } from './paths.mjs';
 import { readJson, writeJsonAtomic, ensureDirs } from './fsx.mjs';
 import { createLogger } from './log.mjs';
@@ -198,7 +198,7 @@ export async function start() {
     if (!r.ok) throw new Error(r.out || '服务启动失败');
     // 第一次成功启动后设为开机自启——配置已经校验过了，不会开机崩循环
     await platform.serviceEnable(platform.SERVICES.kernel, true);
-    await waitForRunning();
+    await waitForResponding();
     return status();
   }
 
@@ -215,12 +215,33 @@ export async function start() {
   return status();
 }
 
-/** procd / systemd 的 start 是异步的，轮询一会儿再判定结果。 */
-async function waitForRunning(timeoutMs = 8000) {
+/**
+ * 内核是否真的活了。
+ *
+ * 不能只看 procd / systemd 的 status 文本：配置有问题时内核每 5 秒崩一次被重新拉起，
+ * 两次崩溃之间 status 照样报 running。必须问内核自己要答案——
+ * Clash API 能响应才算起来了。
+ */
+export async function isResponding(timeoutMs = 2500) {
+  try {
+    const { loadSettings } = await import('./settings.mjs');
+    const secret = loadSettings().kernel?.clashSecret;
+    const res = await fetch(`http://${KERNEL.clashApiHost}:${KERNEL.clashApiPort}/version`, {
+      signal: AbortSignal.timeout(timeoutMs),
+      headers: secret ? { Authorization: `Bearer ${secret}` } : {},
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** 轮询等内核真的起来。 */
+async function waitForResponding(timeoutMs = 25000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (await platform.serviceActive(platform.SERVICES.kernel)) return true;
-    await new Promise((r) => setTimeout(r, 400));
+    if (await isResponding()) return true;
+    await new Promise((r) => setTimeout(r, 600));
   }
   return false;
 }
@@ -256,7 +277,7 @@ export async function restart() {
     const r = await platform.serviceControl(platform.SERVICES.kernel, 'restart');
     if (!r.ok) throw new Error(r.out || '服务重启失败');
     await platform.serviceEnable(platform.SERVICES.kernel, true);
-    if (!(await waitForRunning())) {
+    if (!(await waitForResponding())) {
       const tail = tailLog(30);
       throw new Error(`内核启动后没能保持在运行状态${tail ? `\n日志尾部：\n${tail}` : ''}`);
     }
