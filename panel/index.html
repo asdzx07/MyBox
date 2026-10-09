@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<title>MyBox</title>
+<title>MyBox - sing-box 官方透明代理控制面板</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="./style.css">
 </head>
@@ -28,31 +28,64 @@
 <div id="app" class="hidden">
   <aside class="sidebar">
     <div class="brand">MyBox<small id="brandVersion"></small></div>
-    <div class="sb-sec">管理</div>
+    
+    <div class="sb-sec">导航</div>
     <nav class="sb-nav">
-      <button data-tab="overview" class="active"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg></span>概览</button>
-      <button data-tab="nodes"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></span>节点</button>
+      <!-- 1. 概览 -->
+      <button data-tab="overview" class="active">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg></span>
+        概览
+      </button>
+
+      <!-- 2. 节点分组 -->
+      <button data-tab="nodes">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></span>
+        节点分组
+      </button>
+
+      <!-- 3. 目标分流 -->
+      <button data-tab="policies">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span>
+        目标分流
+      </button>
+
+      <!-- 4. 活动连接 -->
+      <button data-tab="connections">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>
+        活动连接<span class="bdg hidden" id="sbConnCount">0</span>
+      </button>
+
+      <!-- 5. 内网分流 -->
+      <button data-tab="clients">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
+        内网分流
+      </button>
+
+      <!-- 6. 订阅管理 -->
+      <button data-tab="subscriptions">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7 12 12l8.7-5M12 22V12"/></svg></span>
+        订阅管理
+      </button>
+
+      <!-- 7. 核心设置 -->
+      <button data-tab="settings">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+        核心设置
+      </button>
     </nav>
-    <div class="sb-sec">订阅</div>
-    <nav class="sb-nav">
-      <button data-tab="subscriptions"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7 12 12l8.7-5M12 22V12"/></svg></span>订阅管理</button>
-      <div id="sbSubGroups"></div>
-      <button data-tab="connections"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>当前连接<span class="bdg hidden" id="sbConnCount">0</span></button>
-    </nav>
-    <div class="sb-sec">配置</div>
-    <nav class="sb-nav">
-      <button data-tab="groups"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>分组</button>
-      <button data-tab="policies"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span>策略</button>
-      <button data-tab="logs"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg></span>日志</button>
-      <button data-tab="settings"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>设置</button>
-    </nav>
+    
+    <div id="sbSubGroups" class="hidden"></div>
+
     <div class="sb-foot">
-      <button data-tab="logout" class="ghost"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/></svg></span>退出</button>
+      <button data-tab="logout" class="ghost">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/></svg></span>
+        退出登录
+      </button>
     </div>
   </aside>
 
   <main>
-    <!-- ---------------------------------------------------------- 概览 -->
+    <!-- ---------------------------------------------------------- 1. 概览 -->
     <section class="page active" id="page-overview">
       <h2>概览</h2>
 
@@ -62,27 +95,27 @@
             <span class="dot" id="heroDot"></span>
             <span id="statKernel">—</span>
           </div>
-          <div class="hero-meta" id="overviewNote"></div>
+          <div class="hero-meta" id="overviewNote">透明代理正常运行中 · 直连流量未进内核 (零损耗)</div>
         </div>
         <div class="hero-actions">
           <button class="primary" id="btnDeploy">部署配置</button>
           <button class="small" id="btnRestart">重启内核</button>
-          <button class="small" id="btnStop">停止内核</button>
+          <button class="small danger" id="btnStop">停止内核</button>
         </div>
         <p class="warn-text hidden" id="overviewHint"></p>
       </div>
 
       <div class="card">
         <div class="card-head">
-          <h3>实时流量</h3>
+          <h3>实时流量监控</h3>
           <div class="spacer"></div>
           <span class="note" id="trafficLegend"><span class="lg up"></span>上传 <span class="lg down"></span>下载</span>
           <button class="small" id="btnTrafficReset">清零</button>
         </div>
         <canvas id="trafficChart" height="120"></canvas>
-        <div class="grid" style="margin-top:12px">
-          <div class="stat"><div class="k">↑ 上传</div><div class="v" id="statUp">—</div></div>
-          <div class="stat"><div class="k">↓ 下载</div><div class="v" id="statDown">—</div></div>
+        <div class="grid" style="margin-top:14px">
+          <div class="stat"><div class="k">↑ 实时上传</div><div class="v" id="statUp" style="color:var(--accent)">—</div></div>
+          <div class="stat"><div class="k">↓ 实时下载</div><div class="v" id="statDown" style="color:var(--ok)">—</div></div>
           <div class="stat"><div class="k">累计上传</div><div class="v" id="statTotalUp">—</div></div>
           <div class="stat"><div class="k">累计下载</div><div class="v" id="statTotalDown">—</div></div>
         </div>
@@ -90,14 +123,14 @@
 
       <div class="grid-2">
         <div class="card">
-          <div class="card-head"><h3>内核</h3></div>
-          <div class="stat-row"><span>版本</span><strong id="statVersion">—</strong></div>
-          <div class="stat-row"><span>节点</span><strong id="statNodes">—</strong></div>
+          <div class="card-head"><h3>内核状态</h3></div>
+          <div class="stat-row"><span>官方版本</span><strong id="statVersion">—</strong></div>
+          <div class="stat-row"><span>总节点数</span><strong id="statNodes">—</strong></div>
           <div class="stat-row"><span>已启用策略</span><strong id="statPolicies">—</strong></div>
         </div>
         <div class="card">
           <div class="card-head">
-            <h3>节点组</h3>
+            <h3>出口节点组</h3>
             <div class="spacer"></div>
             <button class="small" id="btnOverviewNodes">刷新</button>
           </div>
@@ -106,96 +139,49 @@
       </div>
     </section>
 
-    <!-- ---------------------------------------------------------- 当前连接 -->
-    <section class="page" id="page-connections">
-      <h2>当前连接</h2>
-      <div class="card">
-        <div class="card-head">
-          <h3>活动连接</h3>
-          <div class="spacer"></div>
-          <span class="note" id="connPageCount"></span>
-          <button class="small" id="btnConnsRefresh">刷新</button>
-        </div>
-        <div id="connsList"></div>
-      </div>
-    </section>
-
-    <!-- ---------------------------------------------------------- 日志 -->
-    <section class="page" id="page-logs">
-      <h2>日志</h2>
-      <div class="card">
-        <div class="card-head">
-          <h3>内核日志</h3>
-          <div class="spacer"></div>
-          <input id="logSearch" placeholder="搜索日志…" style="width:200px">
-          <label class="inline note"><input type="checkbox" id="logAuto" style="width:auto"> 自动刷新</label>
-          <button class="small" id="btnLog">刷新</button>
-        </div>
-        <pre class="log" id="kernelLog">—</pre>
-      </div>
-    </section>
-
-    <!-- ---------------------------------------------------------- 节点 -->
+    <!-- ---------------------------------------------------------- 2. 节点分组 -->
     <section class="page" id="page-nodes">
-      <h2>节点</h2>
+      <h2>节点分组</h2>
 
       <div class="card">
         <div class="card-head">
-          <h3>节点组</h3>
+          <h3>出口节点管理</h3>
           <div class="spacer"></div>
           <button class="small" id="btnCollapseAll">全部折叠</button>
           <button class="small" id="btnReloadNodes">刷新</button>
-          <button class="small" id="btnTestAll">全部测速</button>
+          <button class="small primary" id="btnTestAll">⚡ 全部测速</button>
         </div>
-        <p class="note" style="margin:-4px 0 12px">
-          点成员即可切换，切换走内核的 Clash API，<strong>不重启内核、不断流</strong>。点组标题可折叠。
+        <p class="note" style="margin:-4px 0 14px">
+          点击节点卡片即可无缝切换出口，通过内核 Clash API 切换，<strong>不重启内核、不断流</strong>。
         </p>
         <div id="nodeGroups"></div>
       </div>
 
+      <!-- 分组策略配置 -->
       <div class="card">
-        <div class="card-head"><h3>全部节点</h3><div class="spacer"></div>
+        <div class="card-head">
+          <h3>分组规则配置</h3>
+          <div class="spacer"></div>
+          <button class="small primary" id="btnAddGroup">＋ 新建分组</button>
+        </div>
+        <p class="note" style="margin:-4px 0 12px">「自动择优」组按延迟选最快节点；「手动选择」组自己挑。动态组会按关键词自动收编新节点。</p>
+        <div id="groupList"></div>
+        <div style="margin-top:14px">
+          <button class="primary" id="btnSaveGroups">保存分组</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h3>全部节点</h3>
+          <div class="spacer"></div>
           <span class="note" id="nodeCount"></span>
         </div>
         <div class="list" id="nodeList"></div>
       </div>
     </section>
 
-    <!-- ---------------------------------------------------------- 订阅 -->
-    <section class="page" id="page-subscriptions">
-      <h2>订阅</h2>
-
-      <div class="card">
-        <h3>添加订阅</h3>
-        <div class="row">
-          <label class="field" style="flex:1 1 180px"><span>名称</span><input id="subName" placeholder="可留空"></label>
-          <label class="field" style="flex:2 1 280px"><span>订阅地址</span><input id="subUrl" placeholder="https://..."></label>
-          <div class="fixed"><button class="primary" id="btnAddSub">添加并拉取</button></div>
-        </div>
-        <p class="note">支持 sing-box JSON、Clash YAML、base64 分享链接。</p>
-      </div>
-
-      <div class="card">
-        <div class="card-head"><h3>已有订阅</h3><div class="spacer"></div>
-          <button class="small" id="btnRefreshSubs">全部刷新</button>
-        </div>
-        <p class="note" id="subSwitchNote" style="margin:-4px 0 12px"></p>
-        <div class="list" id="subList"></div>
-      </div>
-    </section>
-
-    <!-- ---------------------------------------------------------- 分组 -->
-    <section class="page" id="page-groups">
-      <h2>节点分组</h2>
-      <p class="note" style="margin:-6px 0 14px">「自动择优」组按延迟选最快节点；「手动选择」组自己挑。动态组会按关键词自动收编新节点。</p>
-      <div class="card">
-        <button class="primary" id="btnAddGroup">＋ 新建分组</button>
-      </div>
-      <div id="groupList"></div>
-      <div class="card"><button class="primary" id="btnSaveGroups">保存分组</button></div>
-    </section>
-
-    <!-- ---------------------------------------------------------- 策略 -->
+    <!-- ---------------------------------------------------------- 3. 目标分流 -->
     <section class="page" id="page-policies">
       <h2>目标分流</h2>
       <p class="note" style="margin:-6px 0 14px">
@@ -203,14 +189,14 @@
       </p>
       <div id="policyList"></div>
       <div class="card">
-        <button class="primary" id="btnSavePolicies">保存策略</button>
-        <button id="btnAddPolicy">新增策略</button>
-        <button id="btnResetPolicies">恢复默认策略</button>
-        <button id="btnRefreshRulesets">更新规则集</button>
-        <p class="note" style="margin-top:10px">
-          没命中任何策略的流量走「兜底」出口（默认走代理）。这样按裸 IP 发起的连接
-          （App 硬编码 IP、客户端自带 DNS）也能正常代理出去。想改成「只代理被墙的」，
-          去「节点」页把「兜底」切到「直连」。
+        <div class="inline" style="flex-wrap:wrap;gap:8px">
+          <button class="primary" id="btnSavePolicies">保存策略</button>
+          <button id="btnAddPolicy">新增策略</button>
+          <button id="btnResetPolicies">恢复默认策略</button>
+          <button id="btnRefreshRulesets">更新规则集</button>
+        </div>
+        <p class="note" style="margin-top:12px">
+          没命中任何策略的流量走「兜底」出口（默认走代理）。这样按裸 IP 发起的连接也能正常代理出去。
           <br>规则集（geosite/geoip）每天自动更新，点「更新规则集」立即更新。
         </p>
       </div>
@@ -225,17 +211,77 @@
       </div>
     </section>
 
-    <!-- ---------------------------------------------------------- 设置 -->
-    <section class="page" id="page-settings">
-      <h2>设置</h2>
+    <!-- ---------------------------------------------------------- 4. 活动连接 -->
+    <section class="page" id="page-connections">
+      <h2>活动连接</h2>
+      <div class="card">
+        <div class="card-head">
+          <h3>实时连接列表</h3>
+          <div class="spacer"></div>
+          <span class="note" id="connPageCount"></span>
+          <button class="small" id="btnConnsRefresh">刷新</button>
+        </div>
+        <div id="connsList"></div>
+      </div>
+    </section>
+
+    <!-- ---------------------------------------------------------- 5. 内网分流 (NEW) -->
+    <section class="page" id="page-clients">
+      <h2>内网分流</h2>
+      <p class="note" style="margin:-6px 0 14px">
+        按局域网设备 IP 划分代理策略（如 NAS 下载机强制直连不封号，电视盒子全局走代理，手机电脑走规则分流）。
+      </p>
 
       <div class="card">
-        <h3>网络</h3>
+        <div class="card-head">
+          <h3>局域网设备控制</h3>
+          <div class="spacer"></div>
+          <button class="small" id="btnScanClients">刷新设备列表</button>
+          <button class="small primary" id="btnAddClient">＋ 添加设备</button>
+        </div>
+        <div id="clientList"></div>
+        <p class="note" style="margin-top:12px">
+          通过系统 iptables/nftables 标记或路由旁路分流，未单独设置的局域网设备默认走「规则分流」。
+        </p>
+      </div>
+    </section>
+
+    <!-- ---------------------------------------------------------- 6. 订阅管理 -->
+    <section class="page" id="page-subscriptions">
+      <h2>订阅管理</h2>
+
+      <div class="card">
+        <h3>添加订阅</h3>
+        <div class="row">
+          <label class="field" style="flex:1 1 180px"><span>名称</span><input id="subName" placeholder="例如：极速机场主线"></label>
+          <label class="field" style="flex:2 1 280px"><span>订阅地址</span><input id="subUrl" placeholder="https://..."></label>
+          <div class="fixed"><button class="primary" id="btnAddSub">添加并拉取</button></div>
+        </div>
+        <p class="note">支持 sing-box JSON、Clash YAML、base64 分享链接。</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h3>已有订阅</h3>
+          <div class="spacer"></div>
+          <button class="small" id="btnRefreshSubs">全部刷新</button>
+        </div>
+        <p class="note" id="subSwitchNote" style="margin:-4px 0 12px"></p>
+        <div class="list" id="subList"></div>
+      </div>
+    </section>
+
+    <!-- ---------------------------------------------------------- 7. 核心设置 -->
+    <section class="page" id="page-settings">
+      <h2>核心设置</h2>
+
+      <div class="card">
+        <h3>网络与 TUN 栈</h3>
         <div class="inline" style="flex-wrap:wrap;gap:16px">
           <label class="inline"><input type="checkbox" id="setIpv6" style="width:auto"> 启用 IPv6</label>
           <label class="inline"><input type="checkbox" id="setRejectQuic" style="width:auto"> 屏蔽 QUIC</label>
           <label class="inline"><input type="checkbox" id="setAutoRedirect" style="width:auto"> nftables 转发（auto_redirect）</label>
-          <label class="inline"><input type="checkbox" id="setDirectBypass" style="width:auto"> 直连不进内核</label>
+          <label class="inline"><input type="checkbox" id="setDirectBypass" style="width:auto"> 直连不进内核 (零损耗)</label>
           <label class="inline"><input type="checkbox" id="setDirectForNodes" style="width:auto"> 节点服务器直连</label>
         </div>
         <p class="note" style="margin-top:10px">
@@ -246,7 +292,7 @@
       </div>
 
       <div class="card">
-        <h3>DNS</h3>
+        <h3>DNS 分流</h3>
         <div class="row">
           <label class="field"><span>接管方式</span>
             <select id="setDnsMode">
@@ -257,11 +303,13 @@
           <label class="field"><span>直连 DNS</span><input id="setDnsDirect" placeholder="223.5.5.5"></label>
           <label class="field"><span>代理 DNS</span><input id="setDnsProxy" placeholder="1.1.1.1"></label>
         </div>
-        <label class="inline"><input type="checkbox" id="setFakeIp" style="width:auto"> 代理域名使用 FakeIP</label>
-        <label class="inline"><input type="checkbox" id="setAdblock" style="width:auto"> DNS 广告过滤（开屏广告）</label>
+        <div class="inline" style="gap:16px;margin:8px 0">
+          <label class="inline"><input type="checkbox" id="setFakeIp" style="width:auto"> 代理域名使用 FakeIP</label>
+          <label class="inline"><input type="checkbox" id="setAdblock" style="width:auto"> DNS 广告过滤（开屏广告）</label>
+        </div>
         <div class="row">
-          <label class="field"><span>手动广告规则（每行一个域名）</span><textarea id="setAdblockCustom" rows="3" placeholder="ads.example.com"></textarea></label>
-          <label class="field"><span>广告白名单（每行一个域名，误杀时填）</span><textarea id="setAdblockAllow" rows="3" placeholder="example.com"></textarea></label>
+          <label class="field"><span>手动广告规则（每行一个域名）</span><textarea id="setAdblockCustom" rows="2" placeholder="ads.example.com"></textarea></label>
+          <label class="field"><span>广告白名单（每行一个域名）</span><textarea id="setAdblockAllow" rows="2" placeholder="example.com"></textarea></label>
         </div>
         <div class="row">
           <button class="small" id="btnAdblockRefresh">更新广告规则集</button>
@@ -270,7 +318,7 @@
       </div>
 
       <div class="card">
-        <h3>内核</h3>
+        <h3>内核版本与更新</h3>
         <div class="row">
           <label class="field"><span>当前版本</span><input id="setKernelVersion" readonly></label>
           <label class="field"><span>日志级别</span>
@@ -283,6 +331,17 @@
           <span class="note" id="kernelUpdateNote"></span>
         </div>
         <p class="note" style="margin-top:10px">内核始终来自官方 SagerNet/sing-box Release，本项目不做任何修改。</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h3>内核运行日志</h3>
+          <div class="spacer"></div>
+          <input id="logSearch" placeholder="搜索日志…" style="width:180px">
+          <label class="inline note"><input type="checkbox" id="logAuto" style="width:auto"> 自动刷新</label>
+          <button class="small" id="btnLog">刷新</button>
+        </div>
+        <pre class="log" id="kernelLog">—</pre>
       </div>
 
       <div class="card">

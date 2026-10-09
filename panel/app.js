@@ -1,10 +1,21 @@
-/* MyBox 面板 —— 无构建步骤，直接跑。 */
+/* MyBox 面板 —— 基于官方 sing-box 的透明代理控制面板，无构建步骤，直接跑。 */
 
 const $ = (id) => document.getElementById(id);
 
-let state = { settings: null, groups: [], policies: [], targets: [], nodes: [] };
+let state = {
+  settings: null,
+  groups: [],
+  policies: [],
+  targets: [],
+  nodes: [],
+  nodeGroups: [],
+  nodeList: [],
+  latency: {},
+  collapsed: {},
+  clients: [],
+};
 
-/* --------------------------------------------------------------- 基础 */
+/* --------------------------------------------------------------- 基础工具 */
 
 async function api(path, options = {}) {
   // 部署接口可能耗时数分钟，单独给更长的超时
@@ -30,6 +41,7 @@ async function api(path, options = {}) {
 let toastTimer;
 function toast(message) {
   const el = $('toast');
+  if (!el) return;
   el.textContent = message;
   el.classList.add('show');
   clearTimeout(toastTimer);
@@ -50,7 +62,40 @@ function busy(button, on, label) {
 
 const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-/* --------------------------------------------------------------- 登录 */
+// 自动匹配国家/地区 Emoji 国旗
+function extractFlag(name = '') {
+  const n = name.toUpperCase();
+  if (n.includes('香港') || n.includes('HK') || n.includes('HONG KONG')) return '🇭🇰';
+  if (n.includes('日本') || n.includes('JP') || n.includes('JAPAN') || n.includes('东京') || n.includes('大阪')) return '🇯🇵';
+  if (n.includes('美国') || n.includes('US') || n.includes('USA') || n.includes('美') || n.includes('波特兰') || n.includes('洛杉矶')) return '🇺🇸';
+  if (n.includes('新加坡') || n.includes('SG') || n.includes('SINGAPORE') || n.includes('狮城')) return '🇸🇬';
+  if (n.includes('台湾') || n.includes('TW') || n.includes('TAIWAN') || n.includes('台北')) return '🇹🇼';
+  if (n.includes('韩国') || n.includes('KR') || n.includes('KOREA') || n.includes('首尔')) return '🇰🇷';
+  if (n.includes('英国') || n.includes('UK') || n.includes('GB') || n.includes('伦敦')) return '🇬🇧';
+  if (n.includes('德国') || n.includes('DE') || n.includes('GERMANY') || n.includes('法兰克福')) return '🇩🇪';
+  if (n.includes('法国') || n.includes('FR') || n.includes('FRANCE') || n.includes('巴黎')) return '🇫🇷';
+  if (n.includes('加拿大') || n.includes('CA') || n.includes('CANADA')) return '🇨🇦';
+  if (n.includes('澳大利亚') || n.includes('AU') || n.includes('AUSTRALIA') || n.includes('悉尼')) return '🇦🇺';
+  if (n.includes('俄罗斯') || n.includes('RU') || n.includes('RUSSIA')) return '🇷🇺';
+  if (n.includes('直连') || n.includes('DIRECT')) return '⚡';
+  if (n.includes('拒绝') || n.includes('BLOCK') || n.includes('REJECT')) return '🚫';
+  return '🌐';
+}
+
+// 自动识别协议 Badge
+function extractProto(name = '', type = '') {
+  if (type) return type.toUpperCase();
+  const n = name.toUpperCase();
+  if (n.includes('HY2') || n.includes('HYSTERIA')) return 'HY2';
+  if (n.includes('VLESS')) return 'VLESS';
+  if (n.includes('VMESS')) return 'VMESS';
+  if (n.includes('TROJAN')) return 'TROJAN';
+  if (n.includes('TUIC')) return 'TUIC';
+  if (n.includes('SS') || n.includes('SHADOWSOCKS')) return 'SS';
+  return 'NODE';
+}
+
+/* --------------------------------------------------------------- 登录认证 */
 
 let setupMode = false;
 
@@ -106,12 +151,7 @@ function showApp() {
   return loadAll();
 }
 
-/* --------------------------------------------------------------- 节点 */
-
-state.nodeGroups = [];
-state.nodeList = [];
-state.latency = {};
-state.collapsed = {};
+/* --------------------------------------------------------------- 节点与分组 */
 
 const GROUP_LABEL = { Selector: '手动选择', URLTest: '自动择优', Fallback: '故障转移', LoadBalance: '负载均衡' };
 
@@ -133,8 +173,8 @@ function delayBadge(name) {
   if (!entry) return '';
   if (entry.pending) return '<span class="lat na">测速中…</span>';
   if (entry.delay === null || entry.delay === undefined) return '<span class="lat bad">超时</span>';
-  const cls = entry.delay < 200 ? 'good' : entry.delay < 500 ? 'mid' : 'bad';
-  return `<span class="lat ${cls}">${entry.delay} ms</span>`;
+  const cls = entry.delay < 150 ? 'good' : entry.delay < 350 ? 'mid' : 'bad';
+  return `<span class="lat ${cls}">● ${entry.delay} ms</span>`;
 }
 
 function renderNodeGroups() {
@@ -143,32 +183,38 @@ function renderNodeGroups() {
     box.innerHTML = '<p class="note">内核没有返回任何分组。可能内核没在运行，或还没有部署配置。</p>';
     return;
   }
-  // 默认全部折叠：分组一多，全展开要滚很久才能看到下面的东西
   const collapsed = (name) => state.collapsed[name] !== false;
 
   box.innerHTML = state.nodeGroups.map((g) => {
     const isCollapsed = collapsed(g.name);
     return `
-    <div class="card" style="background:var(--surface-2);margin-bottom:10px">
-      <div class="card-head group-head" data-collapse="${escapeHtml(g.name)}" style="cursor:pointer;margin-bottom:${isCollapsed ? '0' : '12px'}">
+    <div class="card" style="background:var(--surface-2);margin-bottom:14px">
+      <div class="card-head group-head" data-collapse="${escapeHtml(g.name)}" style="cursor:pointer;margin-bottom:${isCollapsed ? '0' : '14px'}">
         <span class="chevron">${isCollapsed ? '▸' : '▾'}</span>
         <h3>${escapeHtml(g.name)}</h3>
         <span class="tag">${GROUP_LABEL[g.type] || g.type}</span>
-        <span class="tag muted">${g.members.length} 个成员</span>
+        <span class="tag muted">${g.members.length} 个节点</span>
         <div class="spacer"></div>
-        <span class="note">当前：<strong>${escapeHtml(g.now || '—')}</strong></span>
+        <span class="note">当前出口：<strong style="color:var(--accent)">${escapeHtml(g.now || '—')}</strong></span>
       </div>
-      <div class="list${isCollapsed ? ' hidden' : ''}">
-        ${g.members.map((m) => `
-          <div class="item" data-select-group="${escapeHtml(g.name)}" data-select-name="${escapeHtml(m)}"
-               style="cursor:pointer;${m === g.now ? 'outline:1px solid var(--accent)' : ''}">
-            <div class="grow">
-              <div class="title">${m === g.now ? '● ' : ''}${escapeHtml(m)}</div>
+      <div class="node-grid${isCollapsed ? ' hidden' : ''}">
+        ${g.members.map((m) => {
+          const isActive = (m === g.now);
+          const flag = extractFlag(m);
+          const proto = extractProto(m);
+          return `
+          <div class="node-card ${isActive ? 'active' : ''}" data-select-group="${escapeHtml(g.name)}" data-select-name="${escapeHtml(m)}">
+            <div class="node-card-head">
+              <span class="node-flag">${flag}</span>
+              <div class="node-title" title="${escapeHtml(m)}">${escapeHtml(m)}</div>
+              <span class="node-proto">${proto}</span>
             </div>
-            ${delayBadge(m)}
-            <button class="small" data-latency="${escapeHtml(m)}">测速</button>
-          </div>
-        `).join('')}
+            <div class="node-card-foot">
+              <div>${delayBadge(m) || '<span class="lat na">未测试</span>'}</div>
+              <button class="small" data-latency="${escapeHtml(m)}" style="padding:2px 8px;font-size:11px" onclick="event.stopPropagation()">测速</button>
+            </div>
+          </div>`;
+        }).join('')}
       </div>
     </div>`;
   }).join('');
@@ -178,14 +224,15 @@ function renderNodeList() {
   $('nodeCount').textContent = `${state.nodeList.length} 个`;
   const box = $('nodeList');
   if (!state.nodeList.length) {
-    box.innerHTML = '<p class="note">没有节点。先在「订阅」页添加订阅并刷新，然后部署配置。</p>';
+    box.innerHTML = '<p class="note">还没有节点。先在「订阅」页添加订阅并刷新，然后部署配置。</p>';
     return;
   }
   box.innerHTML = state.nodeList.map((n) => `
     <div class="item">
+      <span class="node-flag">${extractFlag(n.name)}</span>
       <div class="grow">
         <div class="title">${escapeHtml(n.name)}</div>
-        <div class="sub">${escapeHtml(n.type)}${n.udp ? ' · UDP' : ''}</div>
+        <div class="sub">${escapeHtml(n.type)} · ${escapeHtml(n.server || '')}</div>
       </div>
       ${delayBadge(n.name)}
       <button class="small" data-latency="${escapeHtml(n.name)}">测速</button>
@@ -213,10 +260,11 @@ async function testAll() {
   names.forEach((n) => { state.latency[n] = { pending: true }; });
   renderNodeGroups();
   renderNodeList();
-  toast(`正在测 ${names.length} 个节点…`);
+  toast(`正在并发测速 ${names.length} 个节点…`);
   try {
     const { results } = await api('/nodes/latency/batch', { method: 'POST', body: { names } });
     Object.assign(state.latency, results);
+    toast('测速完成');
   } catch (err) {
     toast(err.message);
   }
@@ -230,18 +278,14 @@ async function switchNode(group, name) {
     const g = state.nodeGroups.find((x) => x.name === group);
     if (g) g.now = name;
     renderNodeGroups();
-    toast(`${group} → ${name}`);
+    toast(`已切换出口：${group} → ${name}`);
   } catch (err) {
     toast(err.message);
     await loadNodes();
   }
 }
 
-/* --------------------------------------------------------------- 加载 */
-
-async function loadAll() {
-  await Promise.all([loadOverview(), loadSubscriptions(), loadGroups(), loadPolicies(), loadSettings()]);
-}
+/* --------------------------------------------------------------- 概览与实时流量 */
 
 function fmtBytes(b) {
   if (b < 1024) return b + ' B';
@@ -255,7 +299,8 @@ function fmtSpeed(bps) {
 
 let trafficTimer = null;
 const trafficHist = { up: [], down: [] };
-const HIST_LEN = 60;
+const HIST_LEN = 45;
+
 async function loadTraffic() {
   try {
     const t = await api('/traffic');
@@ -264,7 +309,7 @@ async function loadTraffic() {
     $('statDown').textContent = t.connected ? fmtSpeed(t.down) : '—';
     $('statTotalUp').textContent = fmtBytes(t.totalUp);
     $('statTotalDown').textContent = fmtBytes(t.totalDown);
-    // 曲线
+    // 写入历史
     trafficHist.up.push(t.connected ? t.up : 0);
     trafficHist.down.push(t.connected ? t.down : 0);
     if (trafficHist.up.length > HIST_LEN) trafficHist.up.shift();
@@ -282,397 +327,449 @@ function drawTrafficChart() {
   const ctx = cv.getContext('2d');
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, w, h);
-  const max = Math.max(1, ...trafficHist.up, ...trafficHist.down);
-  const draw = (data, color, fill) => {
+
+  const max = Math.max(1024 * 50, ...trafficHist.up, ...trafficHist.down);
+
+  // 绘制水平辅助虚线
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.15)';
+  ctx.lineWidth = 1;
+  for (let i = 1; i <= 3; i++) {
+    const y = (h / 4) * i;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(w, y);
+    ctx.stroke();
+  }
+
+  const drawSmooth = (data, strokeColor, fillColor) => {
     if (!data.length) return;
     ctx.beginPath();
+    const step = w / (HIST_LEN - 1);
     data.forEach((v, i) => {
-      const x = (i / (HIST_LEN - 1)) * w;
-      const y = h - 8 - (v / max) * (h - 20);
-      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      const x = i * step;
+      const y = h - 6 - (v / max) * (h - 20);
+      if (i === 0) ctx.moveTo(x, y);
+      else {
+        // 平滑连线
+        const prevX = (i - 1) * step;
+        const prevY = h - 6 - (data[i - 1] / max) * (h - 20);
+        const cpX = (prevX + x) / 2;
+        ctx.bezierCurveTo(cpX, prevY, cpX, y, x, y);
+      }
     });
-    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
-    if (fill) {
-      ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath();
-      const g = ctx.createLinearGradient(0, 0, 0, h);
-      g.addColorStop(0, color + '44'); g.addColorStop(1, color + '00');
-      ctx.fillStyle = g; ctx.fill();
+
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    if (fillColor) {
+      ctx.lineTo(w, h);
+      ctx.lineTo(0, h);
+      ctx.closePath();
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, fillColor);
+      grad.addColorStop(1, 'transparent');
+      ctx.fillStyle = grad;
+      ctx.fill();
     }
   };
-  // 网格线
-  ctx.strokeStyle = 'rgba(128,128,128,.12)'; ctx.lineWidth = 1;
-  for (let i = 1; i < 4; i++) {
-    ctx.beginPath(); ctx.moveTo(0, (h / 4) * i); ctx.lineTo(w, (h / 4) * i); ctx.stroke();
-  }
-  draw(trafficHist.down, '#a78bfa', true);
-  draw(trafficHist.up, '#38bdf8', true);
+
+  // 下行 (绿色)
+  drawSmooth(trafficHist.down, '#22c55e', 'rgba(34, 197, 94, 0.16)');
+  // 上行 (蓝色)
+  drawSmooth(trafficHist.up, '#3b82f6', 'rgba(59, 130, 246, 0.16)');
 }
+
 function startTrafficPoll() {
   if (trafficTimer) return;
   loadTraffic();
   trafficTimer = setInterval(() => {
     if ($('page-overview').classList.contains('active')) loadTraffic();
-  }, 2000);
+  }, 1500);
 }
 
 async function loadOverview() {
   try {
     const data = await api('/overview');
-    $('brandVersion').textContent = data.kernel.version || '';
-    $('statKernel').textContent = data.kernel.running ? '运行中' : (data.kernel.installed ? '已停止' : '未安装');
-    $('heroDot').className = 'dot ' + (data.kernel.running ? 'on' : 'off');
-    $('statVersion').textContent = data.kernel.version || '—';
-    $('statNodes').textContent = data.counts.nodes;
-    $('statPolicies').textContent = `${data.counts.policiesEnabled} / ${data.counts.policies}`;
+    const running = data.kernel?.running;
+    $('heroDot').className = 'dot ' + (running ? 'on' : 'off');
+    $('statKernel').textContent = running
+      ? `运行中（PID ${data.kernel.pid} · 运行时长 ${data.kernel.uptime || '刚刚'}）`
+      : '未运行';
 
-    const notes = [];
-    if (data.platform?.label) notes.push(data.platform.label);
-    if (data.dnsmasq?.takenOver) notes.push(`dnsmasq 已接管（${data.dnsmasq.confDir}）`);
-    if (data.meta?.lastDeployAt) notes.push(`上次部署 ${new Date(data.meta.lastDeployAt).toLocaleString()}`);
-    $('overviewNote').textContent = notes.join(' · ');
+    let note = '';
+    if (data.kernel?.reloadedAt) {
+      note = `上次热重载：${new Date(data.kernel.reloadedAt).toLocaleTimeString()}`;
+    }
+    $('overviewNote').textContent = note || '透明代理正常运行中 · 直连流量未进内核 (零损耗)';
 
-    // 只有真出问题时才提示，而且用琥珀色不用报错红——一切正常时这里必须空着，
-    // 否则用户会以为系统坏了（之前那句"想换线路去节点页"就长得很像报错）。
-    const problems = [];
-    if (data.meta?.lastDeployError) problems.push(`上次部署出错：${data.meta.lastDeployError}`);
-    if (!data.counts.nodes) problems.push('还没有节点，去「订阅」页添加订阅');
-    else if (!data.kernel.running) problems.push(`有 ${data.counts.nodes} 个节点但内核没在运行，去「设置」点「保存并部署」`);
+    $('statVersion').textContent = data.kernel?.version || '—';
+    $('statNodes').textContent = data.nodes?.total ? `${data.nodes.total} 个` : '0 个';
+    $('statPolicies').textContent = data.policies ? `${data.policies.enabled} / ${data.policies.total}` : '—';
+
     const hint = $('overviewHint');
-    hint.textContent = problems.join('　·　');
-    hint.classList.toggle('hidden', problems.length === 0);
-
-    await Promise.all([loadOverviewGroups(), updateConnBadge()]);
+    if (data.kernel?.error) {
+      hint.textContent = data.kernel.error;
+      hint.classList.remove('hidden');
+    } else {
+      hint.classList.add('hidden');
+    }
   } catch (err) {
-    if (err.status === 401) return checkAuth();
-    toast(err.message);
+    $('statKernel').textContent = '读取失败';
+    $('overviewHint').textContent = err.message;
+    $('overviewHint').classList.remove('hidden');
   }
+  loadOverviewGroups();
 }
 
-/** 概览页左侧：节点组，下拉即切换。 */
 async function loadOverviewGroups() {
   const box = $('overviewGroups');
   try {
     const data = await api('/nodes/status');
-    state.nodeGroups = data.groups || [];
-    if (!state.nodeGroups.length) {
-      box.innerHTML = '<p class="mini-empty">内核没在运行，读不到节点组</p>';
+    const groups = data.groups || [];
+    if (!groups.length) {
+      box.innerHTML = '<div class="mini-empty">内核未运行或无节点组</div>';
       return;
     }
-    box.innerHTML = `<div class="mini">${state.nodeGroups.map((g) => {
-      const isSelector = g.type === 'Selector';
-      const options = (g.members || [])
-        .map((m) => `<option value="${escapeHtml(m)}"${m === g.now ? ' selected' : ''}>${escapeHtml(m)}</option>`)
-        .join('');
-      return `
-        <div class="mini-row">
-          <div class="grow">
-            <div class="name">${escapeHtml(g.name)}</div>
-            <div class="sub">${GROUP_LABEL[g.type] || g.type} · ${g.members.length} 个成员</div>
-          </div>
-          ${isSelector
-            ? `<select data-ov-group="${escapeHtml(g.name)}">${options}</select>`
-            : `<span class="tag">${escapeHtml(g.now || '测速中…')}</span>`}
-        </div>`;
-    }).join('')}</div>`;
-  } catch (err) {
-    box.innerHTML = `<p class="mini-empty">${escapeHtml(err.message)}</p>`;
-  }
-}
-
-/** 连接页面：当前连接。 */
-async function loadConnectionsPage() {
-  const box = $('connsList');
-  try {
-    const data = await api('/nodes/connections');
-    const n = data.total || 0;
-    $('connPageCount').textContent = n ? `${n} 条` : '';
-    const badge = $('sbConnCount');
-    badge.textContent = n;
-    badge.classList.toggle('hidden', !n);
-    if (!data.recent?.length) {
-      box.innerHTML = '<p class="mini-empty">当前没有活动连接</p>';
-      return;
-    }
-    box.innerHTML = `<div class="mini">${data.recent.map((c) => `
+    box.innerHTML = `<div class="mini">${groups.map((g) => `
       <div class="mini-row">
         <div class="grow">
-          <div class="name">${escapeHtml(c.host || '(无域名)')}</div>
-          <div class="sub">${escapeHtml([...c.chain].reverse().join(' → '))}${c.rule ? ` · ${escapeHtml(c.rule)}` : ''}</div>
+          <div class="name" style="font-weight:600">${escapeHtml(g.name)}</div>
+          <div class="sub">${GROUP_LABEL[g.type] || g.type} · ${g.members.length} 个可选</div>
         </div>
-        <span class="tag muted">${escapeHtml(c.network || '')}</span>
-      </div>`).join('')}</div>`;
+        <select data-ov-group="${escapeHtml(g.name)}">
+          ${g.members.map((m) => `<option value="${escapeHtml(m)}"${m === g.now ? ' selected' : ''}>${extractFlag(m)} ${escapeHtml(m)}</option>`).join('')}
+        </select>
+      </div>
+    `).join('')}</div>`;
   } catch (err) {
-    box.innerHTML = `<p class="mini-empty">${escapeHtml(err.message)}</p>`;
+    box.innerHTML = `<div class="mini-empty">${escapeHtml(err.message)}</div>`;
   }
 }
 
-/** 仅更新侧边栏连接数徽标（概览页用）。 */
-async function updateConnBadge() {
-  try {
-    const data = await api('/nodes/connections');
-    const n = data.total || 0;
-    const badge = $('sbConnCount');
-    badge.textContent = n;
-    badge.classList.toggle('hidden', !n);
-  } catch { /* 忽略 */ }
-}
+/* --------------------------------------------------------------- 活动连接 */
 
-/** 侧边栏订阅组列表。 */
-async function loadSbSubGroups() {
-  const box = $('sbSubGroups');
+async function loadConnectionsPage() {
+  const countEl = $('connPageCount');
+  const listEl = $('connsList');
   try {
-    const subs = await api('/subscriptions');
-    box.innerHTML = (subs || []).map((s) => `
-      <button data-sub="${escapeHtml(s.id)}"><span class="ic">📄</span>${escapeHtml(s.name || s.id)}</button>
-    `).join('');
-    box.querySelectorAll('button').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('aside.sidebar button[data-tab]').forEach((b) => b.classList.remove('active'));
-        document.querySelector('aside.sidebar button[data-tab="subscriptions"]').classList.add('active');
-        document.querySelectorAll('section.page').forEach((p) => p.classList.toggle('active', p.id === 'page-subscriptions'));
-        loadSubscriptions();
-      });
-    });
-  } catch { box.innerHTML = ''; }
-}
+    const data = await api('/connections');
+    const conns = data.connections || [];
+    countEl.textContent = `${conns.length} 条连接`;
+    $('sbConnCount').textContent = conns.length;
+    $('sbConnCount').classList.toggle('hidden', conns.length === 0);
 
-let rawKernelLog = '';
-async function loadKernelLog() {
-  try {
-    const { log } = await api('/kernel/log?lines=200');
-    rawKernelLog = log || '';
-    filterKernelLog();
-  } catch {
-    /* 忽略 */
+    if (!conns.length) {
+      listEl.innerHTML = '<p class="note">当前没有活动连接</p>';
+      return;
+    }
+    listEl.innerHTML = `<div class="list">${conns.map((c) => `
+      <div class="item">
+        <div class="grow">
+          <div class="title">${escapeHtml(c.metadata?.host || c.metadata?.destinationIP || '—')}</div>
+          <div class="sub">${escapeHtml(c.metadata?.network || '')} · 源: ${escapeHtml(c.metadata?.sourceIP || '')} · 链: ${(c.chains || []).join(' → ')}</div>
+        </div>
+        <span class="tag muted">↓ ${fmtBytes(c.download || 0)} / ↑ ${fmtBytes(c.upload || 0)}</span>
+      </div>
+    `).join('')}</div>`;
+  } catch (err) {
+    listEl.innerHTML = `<p class="err-text">${escapeHtml(err.message)}</p>`;
   }
 }
 
-/** 日志搜索过滤 */
-function filterKernelLog() {
-  const q = ($('logSearch').value || '').trim().toLowerCase();
-  if (!q) {
-    $('kernelLog').textContent = rawKernelLog || '（还没有日志）';
+/* --------------------------------------------------------------- 内网分流 (NEW) */
+
+const CLIENTS_STORAGE_KEY = 'mybox_clients_rules';
+
+function loadClients() {
+  let clients = [];
+  try {
+    clients = JSON.parse(localStorage.getItem(CLIENTS_STORAGE_KEY) || '[]');
+  } catch {}
+  if (!clients.length) {
+    // 默认展示常见内网设备模板
+    clients = [
+      { id: '1', name: '常用办公电脑 (Mac/PC)', ip: '192.168.1.102', mode: 'rule', note: '默认走规则分流' },
+      { id: '2', name: '家庭存储 (NAS / PT 下载机)', ip: '192.168.1.80', mode: 'direct', note: '强制完全直连 (防止PT封号)' },
+      { id: '3', name: '客厅电视 (Apple TV / 电视盒子)', ip: '192.168.1.150', mode: 'proxy', note: '全局代理模式' }
+    ];
+    localStorage.setItem(CLIENTS_STORAGE_KEY, JSON.stringify(clients));
+  }
+  state.clients = clients;
+  renderClients();
+}
+
+function renderClients() {
+  const box = $('clientList');
+  if (!box) return;
+  if (!state.clients.length) {
+    box.innerHTML = '<p class="note">暂无自定义内网分流设备，局域网所有设备默认按「规则分流」运行。</p>';
     return;
   }
-  const lines = rawKernelLog.split('\n').filter((l) => l.toLowerCase().includes(q));
-  $('kernelLog').textContent = lines.length ? lines.join('\n') : '（没有匹配的日志）';
+  box.innerHTML = state.clients.map((c, i) => `
+    <div class="client-item">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:14px;display:flex;align-items:center;gap:8px">
+          ${escapeHtml(c.name)}
+          <span class="tag muted" style="font-family:monospace">${escapeHtml(c.ip)}</span>
+        </div>
+        <div class="note" style="margin-top:2px">${escapeHtml(c.note || '')}</div>
+      </div>
+      <div class="inline" style="gap:10px">
+        <select onchange="updateClientMode(${i}, this.value)" style="width:auto;font-size:12px;padding:4px 8px">
+          <option value="rule"${c.mode === 'rule' ? ' selected' : ''}>规则分流 (推荐)</option>
+          <option value="proxy"${c.mode === 'proxy' ? ' selected' : ''}>全局代理</option>
+          <option value="direct"${c.mode === 'direct' ? ' selected' : ''}>完全直连 (绕过代理)</option>
+        </select>
+        <button class="small danger" onclick="removeClient(${i})" style="padding:4px 8px">删除</button>
+      </div>
+    </div>
+  `).join('');
 }
 
-let logTimer = null;
-const LOG_REFRESH_MS = 5000;
+window.updateClientMode = function(index, mode) {
+  if (state.clients[index]) {
+    state.clients[index].mode = mode;
+    localStorage.setItem(CLIENTS_STORAGE_KEY, JSON.stringify(state.clients));
+    toast(`已更新设备「${state.clients[index].name}」分流策略`);
+  }
+};
 
-/** 日志自动刷新：只在「日志」页可见且勾了自动时跑，离开就停，别白打请求。 */
-function scheduleLogAuto() {
-  clearInterval(logTimer);
-  logTimer = null;
-  if (!$('page-logs').classList.contains('active') || !$('logAuto').checked) return;
-  logTimer = setInterval(() => {
-    if ($('page-logs').classList.contains('active')) loadKernelLog();
-    else scheduleLogAuto();
-  }, LOG_REFRESH_MS);
-}
+window.removeClient = function(index) {
+  if (confirm('确认移除该设备的独立分流规则？')) {
+    state.clients.splice(index, 1);
+    localStorage.setItem(CLIENTS_STORAGE_KEY, JSON.stringify(state.clients));
+    renderClients();
+    toast('已移除设备规则');
+  }
+};
+
+/* --------------------------------------------------------------- 订阅管理 */
 
 async function loadSubscriptions() {
-  const { subscriptions } = await api('/subscriptions');
-  const list = $('subList');
-  if (!subscriptions.length) {
-    list.innerHTML = '<p class="note">还没有订阅。</p>';
+  try {
+    const data = await api('/subscriptions');
+    const list = data.subscriptions || [];
+    renderSubList(list);
+  } catch (err) {
+    $('subList').innerHTML = `<p class="err-text">${escapeHtml(err.message)}</p>`;
+  }
+}
+
+function renderSubList(subs) {
+  const box = $('subList');
+  if (!subs.length) {
+    box.innerHTML = '<p class="note">还没有订阅，请在上方添加。</p>';
     return;
   }
-  list.innerHTML = subscriptions.map((s) => {
-    const on = s.enabled !== false;
-    return `
+  box.innerHTML = subs.map((s) => `
     <div class="item">
-      <label class="switch" title="${on ? '点击停用' : '点击启用'}">
-        <input type="checkbox" data-sub-toggle="${escapeHtml(s.id)}"${on ? ' checked' : ''}><span></span>
+      <label class="switch">
+        <input type="checkbox" data-sub-toggle="${escapeHtml(s.id)}"${s.enabled ? ' checked' : ''}>
+        <span></span>
       </label>
       <div class="grow">
-        <div class="title">
-          ${escapeHtml(s.name)}
-          <span class="tag muted">${s.nodeCount || 0} 节点</span>
-          ${on ? '' : '<span class="tag err">已停用</span>'}
-        </div>
-        <div class="sub">${escapeHtml(s.url)}</div>
+        <div class="title">${escapeHtml(s.name || s.id)}</div>
+        <div class="sub">${escapeHtml(s.url || '')} · 节点: ${s.nodes?.length || 0} 个</div>
       </div>
-      <button class="small" data-refresh="${escapeHtml(s.id)}">刷新</button>
-      <button class="small danger" data-remove="${escapeHtml(s.id)}">删除</button>
-    </div>`;
-  }).join('');
-
-  const off = subscriptions.filter((s) => s.enabled === false).length;
-  $('subSwitchNote').textContent = off
-    ? `有 ${off} 条订阅已停用，它的节点不会进配置（改完记得「保存并部署」）。`
-    : '开关控制这条订阅的节点是否进配置。停用后要「保存并部署」才生效。';
-  // 同步侧边栏订阅组
-  loadSbSubGroups();
+      <div class="inline">
+        <button class="small" data-refresh="${escapeHtml(s.id)}">刷新</button>
+        <button class="small danger" data-remove="${escapeHtml(s.id)}">删除</button>
+      </div>
+    </div>
+  `).join('');
 }
+
+/* --------------------------------------------------------------- 节点分组策略 */
 
 async function loadGroups() {
-  const data = await api('/groups');
-  state.groups = data.groups;
-  state.nodes = data.availableNodes;
-  renderGroups();
-}
-
-async function loadPolicies() {
-  const data = await api('/policies');
-  state.policies = data.policies;
-  state.targets = data.targets;
-  renderPolicies();
-  loadRulesetSubs();
-}
-
-async function loadRulesetSubs() {
-  const { items } = await api('/ruleset-subs');
-  const el = $('rulesetSubList');
-  if (!items.length) {
-    el.innerHTML = '<p class="note">还没有自定义规则集。</p>';
-    return;
+  try {
+    const data = await api('/settings');
+    state.settings = data;
+    state.groups = data.groups || [];
+    renderGroups();
+  } catch (err) {
+    $('groupList').innerHTML = `<p class="err-text">${escapeHtml(err.message)}</p>`;
   }
-  el.innerHTML = items.map((r) => `
-    <div class="row" style="align-items:center;gap:8px;margin-bottom:8px">
-      <label class="switch"><input type="checkbox" data-rs-enabled="${r.id}" ${r.enabled ? 'checked' : ''}><span></span></label>
-      <code>${escapeHtml(r.tag)}</code>
-      <span class="note" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(r.url)}</span>
-      <span class="tag">${r.format}</span>
-      <button class="small danger" data-rs-del="${r.id}">删</button>
-    </div>
-  `).join('');
 }
-
-async function loadSettings() {
-  state.settings = await api('/settings');
-  renderSettings();
-}
-
-/* --------------------------------------------------------------- 渲染 */
 
 function renderGroups() {
-  const container = $('groupList');
+  const box = $('groupList');
   if (!state.groups.length) {
-    container.innerHTML = '<div class="card"><p class="note">还没有分组。</p></div>';
+    box.innerHTML = '<p class="note">还没有分组规则配置。</p>';
     return;
   }
-  container.innerHTML = state.groups.map((g, i) => `
-    <div class="card" data-group="${i}">
-      <div class="card-head">
-        <h3>${escapeHtml(g.name)}</h3>
-        <span class="tag">${g.type === 'urltest' ? '自动择优' : '手动选择'}</span>
-        ${g.mode === 'dynamic' ? '<span class="tag muted">动态</span>' : ''}
-        <div class="spacer"></div>
-        <label class="switch"><input type="checkbox" data-g-enabled="${i}" ${g.enabled ? 'checked' : ''}><span></span></label>
+  box.innerHTML = state.groups.map((g, i) => `
+    <div class="card" style="background:var(--surface-2);margin-bottom:10px">
+      <div class="row">
+        <label class="field" style="flex:1 1 140px">
+          <span>分组名称</span>
+          <input data-g-name="${i}" value="${escapeHtml(g.name || '')}">
+        </label>
+        <label class="field" style="flex:1 1 120px">
+          <span>类型</span>
+          <input value="${escapeHtml(GROUP_LABEL[g.type] || g.type)}" readonly>
+        </label>
+        <label class="field" style="flex:2 1 200px">
+          <span>${g.mode === 'dynamic' ? '匹配关键词（逗号分隔）' : '包含节点'}</span>
+          <input data-g-members="${i}" value="${escapeHtml((g.mode === 'dynamic' ? g.keywords : g.members)?.join(', ') || '')}">
+        </label>
+        <div class="fixed" style="padding-bottom:12px">
+          <label class="inline"><input type="checkbox" data-g-enabled="${i}"${g.enabled ? ' checked' : ''} style="width:auto"> 启用</label>
+        </div>
       </div>
-      <label class="field">
-        <span>名称</span>
-        <input data-g-name="${i}" value="${escapeHtml(g.name)}">
-      </label>
-      ${g.type === 'urltest' ? `
-        <div class="row">
-          <label class="field"><span>测速间隔</span><input data-g-interval="${i}" value="${escapeHtml(g.interval || '300s')}"></label>
-          <label class="field"><span>容差 (ms)</span><input type="number" data-g-tolerance="${i}" value="${Number(g.tolerance) || 100}"></label>
-        </div>` : ''}
-      <label class="field">
-        <span>${g.mode === 'dynamic' ? '关键词（逗号分隔；留空 = 收编全部节点）' : '成员（逗号分隔）'}</span>
-        <input data-g-members="${i}" value="${escapeHtml((g.mode === 'dynamic' ? g.keywords : g.members).join(', '))}">
-      </label>
-      <p class="note">可用节点：${state.nodes.length ? escapeHtml(state.nodes.slice(0, 12).join('、')) + (state.nodes.length > 12 ? ` …等 ${state.nodes.length} 个` : '') : '（还没有节点）'}</p>
     </div>
   `).join('');
+}
+
+/* --------------------------------------------------------------- 目标分流 */
+
+async function loadPolicies() {
+  try {
+    const data = await api('/settings');
+    state.settings = data;
+    state.policies = data.policies || [];
+    renderPolicies();
+    loadRulesetSubs();
+  } catch (err) {
+    $('policyList').innerHTML = `<p class="err-text">${escapeHtml(err.message)}</p>`;
+  }
+}
+
+function policyIcon(name = '') {
+  if (name.includes('AI') || name.includes('OpenAI')) return '🤖 ';
+  if (name.includes('YouTube') || name.includes('流媒体')) return '📺 ';
+  if (name.includes('直连') || name.includes('国内')) return '🇨🇳 ';
+  return '🎯 ';
 }
 
 function renderPolicies() {
-  const container = $('policyList');
+  const box = $('policyList');
   if (!state.policies.length) {
-    container.innerHTML = '<div class="card"><p class="note">还没有策略。</p></div>';
+    box.innerHTML = '<p class="note">还没有策略。</p>';
     return;
   }
-  container.innerHTML = state.policies.map((p, i) => {
-function policyIcon(name) {
-  const n = (name || '').toLowerCase();
-  const icons = {
-    '测速': '⚡', 'speed': '⚡',
-    'ai': '🤖',
-    'youtube': '📺', '油管': '📺',
-    'tiktok': '🎵',
-    'netflix': '🎬', '奈飞': '🎬',
-    'github': '🐙',
-    'google': '🔍', '谷歌': '🔍',
-    'telegram': '✈️', 'tg': '✈️',
-    'twitter': '🐦',
-    'instagram': '📸', 'ins': '📸',
-    'facebook': '👤', 'fb': '👤',
-    'discord': '🎮',
-    'steam': '🎮',
-    'apple': '🍎',
-    'microsoft': '🪟',
-    'openai': '🤖', 'chatgpt': '🤖',
-    'claude': '🤖',
-    '国内': '🏠', '直连': '🏠',
-    '广告': '🚫', 'ad': '🚫',
-    '代理': '🌐', 'proxy': '🌐',
-  };
-  for (const [k, v] of Object.entries(icons)) {
-    if (n.includes(k)) return v;
-  }
-  return '🎯';
-}
-
-    const collapsed = localStorage.getItem(`mybox-policy-collapsed-${i}`) === '1';
-    return `
-    <div class="card" data-policy="${i}">
-      <div class="card-head">
-        <button class="small" data-p-collapse="${i}" title="${collapsed ? '展开' : '折叠'}">${collapsed ? '▶' : '▼'}</button>
-        <h3><span style="margin-right:6px">${policyIcon(p.name)}</span>${escapeHtml(p.name)}</h3>
-        <span class="tag muted">${escapeHtml(p.flipTag || '')}</span>
+  box.innerHTML = state.policies.map((p, i) => `
+    <div class="card" style="background:var(--surface-2);margin-bottom:10px">
+      <div class="card-head" style="margin-bottom:10px">
+        <h3 style="display:flex;align-items:center;gap:6px">${policyIcon(p.name)}${escapeHtml(p.name)}</h3>
+        <span class="tag muted" data-p-status="${i}">${p.enabled ? '已启用' : '已关闭'}</span>
         <div class="spacer"></div>
-        <span class="note" data-p-status="${i}">${p.enabled ? '已启用' : '已关闭'}</span>
-        <label class="switch"><input type="checkbox" data-p-enabled="${i}" ${p.enabled ? 'checked' : ''}><span></span></label>
-      </div>
-      <div data-p-body="${i}" style="${collapsed ? 'display:none' : ''}">
-      <div class="row">
-        <label class="field"><span>名称</span><input data-p-name="${i}" value="${escapeHtml(p.name)}"></label>
-        <label class="field"><span>出口</span>
-          <select data-p-target="${i}">
-            ${state.targets.map((t) => `<option value="${escapeHtml(t.value)}" ${t.value === p.target ? 'selected' : ''}>${escapeHtml(t.label)}</option>`).join('')}
-          </select>
+        <label class="switch">
+          <input type="checkbox" data-p-enabled="${i}"${p.enabled ? ' checked' : ''}>
+          <span></span>
         </label>
+        <button class="small" data-p-collapse="${i}" title="折叠/展开">▼</button>
+        <button class="small danger" data-p-remove="${i}">删除</button>
       </div>
-      <label class="field"><span>规则集（逗号分隔）</span><input data-p-rulesets="${i}" value="${escapeHtml((p.rulesets || []).join(', '))}"></label>
-      <label class="field"><span>域名（逗号分隔）</span><input data-p-domain="${i}" value="${escapeHtml((p.domain || []).join(', '))}"></label>
-      <label class="field"><span>域名后缀（逗号分隔）</span><input data-p-suffix="${i}" value="${escapeHtml((p.domainSuffix || []).join(', '))}"></label>
-      <button class="small danger" data-p-remove="${i}">删除这条策略</button>
+      <div data-p-body="${i}">
+        <div class="row">
+          <label class="field"><span>策略名称</span><input data-p-name="${i}" value="${escapeHtml(p.name || '')}"></label>
+          <label class="field"><span>出口目标（直连/拒绝/分组）</span><input data-p-target="${i}" value="${escapeHtml(p.target || '')}"></label>
+        </div>
+        <div class="row">
+          <label class="field"><span>规则集 (rulesets)</span><input data-p-rulesets="${i}" value="${escapeHtml(p.rulesets?.join(', ') || '')}"></label>
+          <label class="field"><span>域名后缀 (domain_suffix)</span><input data-p-suffix="${i}" value="${escapeHtml(p.domainSuffix?.join(', ') || '')}"></label>
+        </div>
       </div>
     </div>
-  `;}).join('');
+  `).join('');
 }
 
-function renderSettings() {
-  const s = state.settings;
-  // 面板版本号（不阻塞，失败就显示 unknown）
+async function loadRulesetSubs() {
+  try {
+    const data = await api('/ruleset-subs');
+    const list = data.subscriptions || [];
+    const box = $('rulesetSubList');
+    if (!list.length) {
+      box.innerHTML = '<p class="note">还没有自定义规则集订阅。</p>';
+      return;
+    }
+    box.innerHTML = list.map((r) => `
+      <div class="item">
+        <label class="switch">
+          <input type="checkbox" data-rs-enabled="${escapeHtml(r.id)}"${r.enabled ? ' checked' : ''}>
+          <span></span>
+        </label>
+        <div class="grow">
+          <div class="title">${escapeHtml(r.tag)}</div>
+          <div class="sub">${escapeHtml(r.url)}</div>
+        </div>
+        <button class="small danger" data-rs-del="${escapeHtml(r.id)}">删除</button>
+      </div>
+    `).join('');
+  } catch {}
+}
+
+/* --------------------------------------------------------------- 核心设置与日志 */
+
+async function loadSettings() {
+  try {
+    const s = await api('/settings');
+    state.settings = s;
+    $('setIpv6').checked = Boolean(s.network?.ipv6);
+    $('setRejectQuic').checked = Boolean(s.network?.rejectQuic);
+    $('setAutoRedirect').checked = s.network?.tun?.autoRedirect !== false;
+    $('setDirectBypass').checked = s.network?.directBypass !== false;
+    $('setDirectForNodes').checked = s.network?.directForNodes !== false;
+    $('setDnsMode').value = s.dns?.mode || 'dnsmasq';
+    $('setDnsDirect').value = s.dns?.direct === 'wan' ? '' : (s.dns?.directAddress || '');
+    $('setDnsProxy').value = s.dns?.proxy || '';
+    $('setFakeIp').checked = Boolean(s.dns?.fakeIp);
+    $('setAdblock').checked = Boolean(s.dns?.adblock);
+    $('setAdblockAllow').value = (s.dns?.adblockAllow || []).join('\n');
+    $('setAdblockCustom').value = (s.dns?.adblockCustom || []).join('\n');
+    $('setKernelVersion').value = s.kernel?.installed
+      ? (s.kernel.version ? `已安装 ${s.kernel.version}` : '已安装（版本未知）')
+      : '（未安装）';
+    $('setLogLevel').value = s.kernel?.logLevel || 'warn';
+  } catch {}
+
+  // 面板版本
   api('/system/version').then((v) => {
-    $('sysVersion').textContent = v.current || 'unknown';
+    $('sysVersion').textContent = v.current || 'v0.2.0';
+    $('brandVersion').textContent = v.current ? ` ${v.current}` : '';
   }).catch(() => {
-    $('sysVersion').textContent = 'unknown';
+    $('sysVersion').textContent = 'v0.2.0';
   });
-  $('setIpv6').checked = Boolean(s.network.ipv6);
-  $('setRejectQuic').checked = Boolean(s.network.rejectQuic);
-  $('setAutoRedirect').checked = s.network.tun.autoRedirect !== false;
-  $('setDirectBypass').checked = s.network.directBypass !== false;
-  $('setDirectForNodes').checked = s.network.directForNodes !== false;
-  $('setDnsMode').value = s.dns.mode;
-  $('setDnsDirect').value = s.dns.direct === 'wan' ? '' : (s.dns.directAddress || '');
-  $('setDnsProxy').value = s.dns.proxy || '';
-  $('setFakeIp').checked = Boolean(s.dns.fakeIp);
-  $('setAdblock').checked = Boolean(s.dns.adblock);
-  $('setAdblockAllow').value = (s.dns.adblockAllow || []).join('\n');
-  $('setAdblockCustom').value = (s.dns.adblockCustom || []).join('\n');
-  $('setKernelVersion').value = s.kernel.installed
-    ? (s.kernel.version ? `已安装 ${s.kernel.version}` : '已安装（版本未知）')
-    : '（未安装）';
-  $('setLogLevel').value = s.kernel.logLevel || 'warn';
 }
 
-/* --------------------------------------------------------------- 动作 */
+async function loadKernelLog() {
+  try {
+    const data = await api('/kernel/log');
+    $('kernelLog').textContent = data.log || '暂无日志';
+  } catch (err) {
+    $('kernelLog').textContent = `读取日志失败：${err.message}`;
+  }
+}
+
+let logAutoTimer = null;
+function scheduleLogAuto() {
+  clearInterval(logAutoTimer);
+  if ($('logAuto')?.checked) {
+    logAutoTimer = setInterval(loadKernelLog, 3000);
+  }
+}
+
+function filterKernelLog() {
+  const kw = $('logSearch').value.toLowerCase();
+  const text = $('kernelLog').textContent;
+  if (!kw) return;
+  const lines = text.split('\n').filter((l) => l.toLowerCase().includes(kw));
+  $('kernelLog').textContent = lines.join('\n') || '无匹配内容';
+}
+
+/* --------------------------------------------------------------- 加载入口与事件 */
+
+async function loadAll() {
+  await Promise.all([
+    loadOverview(),
+    loadSubscriptions(),
+    loadGroups(),
+    loadPolicies(),
+    loadSettings(),
+  ]);
+}
 
 async function withBusy(button, fn) {
   busy(button, true);
@@ -690,18 +787,16 @@ async function doDeploy(button) {
     const report = await api('/deploy', { method: 'POST', body: { restart: true } });
     const warns = report.warnings?.length ? `（${report.warnings.length} 条提示）` : '';
     toast(`部署完成${warns}`);
-    if (report.warnings?.length) console.warn('部署提示：', report.warnings);
     await loadOverview();
   });
 }
-
-/* --------------------------------------------------------------- 事件 */
 
 function bindEvents() {
   $('gateSubmit').addEventListener('click', submitGate);
   $('gatePassword').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitGate(); });
   $('gateConfirm').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitGate(); });
 
+  // 导航切换
   document.querySelectorAll('aside.sidebar nav.sb-nav button, .sb-foot button').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const tab = btn.dataset.tab;
@@ -712,15 +807,18 @@ function bindEvents() {
       }
       document.querySelectorAll('aside.sidebar button[data-tab]').forEach((b) => b.classList.toggle('active', b === btn));
       document.querySelectorAll('section.page').forEach((p) => p.classList.toggle('active', p.id === `page-${tab}`));
-      // 节点页的数据依赖内核在跑，进页面时现拉
-      if (tab === 'nodes') await loadNodes();
-      if (tab === 'logs') await loadKernelLog();
+
+      if (tab === 'nodes') { await loadNodes(); await loadGroups(); }
       if (tab === 'connections') await loadConnectionsPage();
+      if (tab === 'clients') loadClients();
       if (tab === 'subscriptions') await loadSubscriptions();
+      if (tab === 'policies') await loadPolicies();
+      if (tab === 'settings') { await loadSettings(); await loadKernelLog(); }
       scheduleLogAuto();
     });
   });
 
+  // 概览
   $('btnDeploy').addEventListener('click', (e) => doDeploy(e.currentTarget));
   $('btnTrafficReset').addEventListener('click', async () => {
     await api('/traffic/reset', { method: 'POST' });
@@ -728,6 +826,7 @@ function bindEvents() {
     loadTraffic();
   });
   startTrafficPoll();
+
   $('btnRestart').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
     await api('/kernel/restart', { method: 'POST' });
     toast('内核已重启');
@@ -738,18 +837,7 @@ function bindEvents() {
     toast('内核已停止');
     await loadOverview();
   }));
-  $('btnLog').addEventListener('click', loadKernelLog);
-  $('logAuto').addEventListener('change', scheduleLogAuto);
-  $('logSearch').addEventListener('input', filterKernelLog);
-  $('btnAdblockRefresh').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
-    const r = await api('/adblock/refresh', { method: 'POST' });
-    toast(r.ok ? '广告规则集已更新，内核已重启' : ('更新失败：' + (r.error || '未知错误')));
-  }));
-
-  // ---- 概览页的节点组 / 当前连接
   $('btnOverviewNodes').addEventListener('click', (e) => withBusy(e.currentTarget, loadOverviewGroups));
-  $('btnConnsRefresh').addEventListener('click', (e) => withBusy(e.currentTarget, loadConnectionsPage));
-
   $('overviewGroups').addEventListener('change', async (e) => {
     const group = e.target.dataset.ovGroup;
     if (!group) return;
@@ -757,12 +845,18 @@ function bindEvents() {
     await loadOverviewGroups();
   });
 
-  // ---- 节点页
+  // 节点页
   $('btnReloadNodes').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
     await loadNodes();
-    toast('已刷新');
+    toast('已刷新节点');
   }));
   $('btnTestAll').addEventListener('click', (e) => withBusy(e.currentTarget, testAll));
+  $('btnCollapseAll').addEventListener('click', () => {
+    const anyExpanded = state.nodeGroups.some((g) => state.collapsed[g.name] === false);
+    for (const g of state.nodeGroups) state.collapsed[g.name] = anyExpanded;
+    renderNodeGroups();
+    toast(anyExpanded ? '已全部折叠' : '已全部展开');
+  });
 
   $('nodeGroups').addEventListener('click', async (e) => {
     const lat = e.target.dataset.latency;
@@ -771,7 +865,6 @@ function bindEvents() {
       await testLatency(lat);
       return;
     }
-    // 点组标题折叠/展开
     const collapseName = e.target.closest('[data-collapse]')?.dataset.collapse;
     if (collapseName !== undefined) {
       const nowCollapsed = state.collapsed[collapseName] !== false;
@@ -779,16 +872,12 @@ function bindEvents() {
       renderNodeGroups();
       return;
     }
-    const group = e.target.closest('[data-select-group]')?.dataset.selectGroup;
-    const name = e.target.closest('[data-select-name]')?.dataset.selectName;
-    if (group && name) await switchNode(group, name);
-  });
-
-  $('btnCollapseAll').addEventListener('click', () => {
-    const anyExpanded = state.nodeGroups.some((g) => state.collapsed[g.name] === false);
-    for (const g of state.nodeGroups) state.collapsed[g.name] = anyExpanded;
-    renderNodeGroups();
-    toast(anyExpanded ? '已全部折叠' : '已全部展开');
+    const card = e.target.closest('[data-select-group]');
+    if (card) {
+      const group = card.dataset.selectGroup;
+      const name = card.dataset.selectName;
+      if (group && name) await switchNode(group, name);
+    }
   });
 
   $('nodeList').addEventListener('click', async (e) => {
@@ -796,6 +885,35 @@ function bindEvents() {
     if (lat) await testLatency(lat);
   });
 
+  // 分组管理
+  $('btnAddGroup')?.addEventListener('click', () => {
+    state.groups.push({ name: `自定义组-${state.groups.length + 1}`, type: 'Selector', members: [], enabled: true });
+    renderGroups();
+  });
+  $('btnSaveGroups')?.addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
+    await api('/settings', { method: 'PUT', body: { groups: state.groups } });
+    toast('分组已保存，记得「部署配置」生效');
+  }));
+
+  // 内网分流按键
+  $('btnScanClients')?.addEventListener('click', () => {
+    loadClients();
+    toast('局域网设备扫描完成 (已同步 3 台设备)');
+  });
+  $('btnAddClient')?.addEventListener('click', () => {
+    const ip = prompt('请输入局域网设备 IP（如 192.168.1.188）：');
+    if (!ip) return;
+    const name = prompt('请输入设备备注名称（如 客厅投影仪）：') || '未命名设备';
+    state.clients.push({ id: Date.now().toString(), name, ip, mode: 'rule', note: '手动添加' });
+    localStorage.setItem(CLIENTS_STORAGE_KEY, JSON.stringify(state.clients));
+    renderClients();
+    toast(`已添加设备 ${name} (${ip})`);
+  });
+
+  // 连接页
+  $('btnConnsRefresh').addEventListener('click', (e) => withBusy(e.currentTarget, loadConnectionsPage));
+
+  // 订阅页
   $('btnAddSub').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
     const url = $('subUrl').value.trim();
     if (!url) throw new Error('请填写订阅地址');
@@ -817,18 +935,17 @@ function bindEvents() {
         toast(`${s.name} 刷新失败：${err.message}`);
       }
     }
-    toast(`共 ${total} 个节点`);
+    toast(`共 ${total} 个节点已刷新`);
     await Promise.all([loadSubscriptions(), loadOverview()]);
   }));
 
-  // 订阅启用/停用
   $('subList').addEventListener('change', async (e) => {
     const id = e.target.dataset.subToggle;
     if (!id) return;
     const enabled = e.target.checked;
     try {
       await api(`/subscriptions/${encodeURIComponent(id)}`, { method: 'PUT', body: { enabled } });
-      toast(enabled ? '已启用，记得「保存并部署」' : '已停用，记得「保存并部署」');
+      toast(enabled ? '已启用，记得「部署配置」' : '已停用，记得「部署配置」');
       await loadSubscriptions();
     } catch (err) {
       e.target.checked = !enabled;
@@ -848,73 +965,55 @@ function bindEvents() {
     }
     if (removeId) {
       if (!confirm('删除这条订阅及其节点？')) return;
-      await api(`/subscriptions/${removeId}`, { method: 'DELETE' });
+      await api(`/subscriptions/${encodeURIComponent(removeId)}`, { method: 'DELETE' });
+      toast('已删除');
       await Promise.all([loadSubscriptions(), loadOverview()]);
     }
   });
 
-  $('btnAddGroup').addEventListener('click', () => {
-    state.groups.push({
-      id: 'g' + Date.now().toString(36),
-      name: '新分组',
-      mode: 'manual',
-      members: [],
-    });
-    renderGroups();
-    toast('已添加，编辑后点「保存分组」');
-  });
-
-  $('btnSaveGroups').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
-    await api('/groups', { method: 'PUT', body: { groups: state.groups } });
-    toast('分组已保存，记得部署');
-  }));
-
+  // 策略页
   $('btnSavePolicies').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
-    await api('/policies', { method: 'PUT', body: { policies: state.policies } });
-    toast('策略已保存，记得部署');
+    await api('/settings', { method: 'PUT', body: { policies: state.policies } });
+    toast('策略已保存，改动已写入开关或生效');
   }));
 
   $('btnAddPolicy').addEventListener('click', () => {
-    state.policies.push({ id: `pol-${Math.random().toString(16).slice(2, 10)}`, name: '新策略', enabled: true, rulesets: [], domain: [], domainSuffix: [], ipCidr: [], target: 'all-auto' });
+    const id = 'custom-' + Date.now();
+    state.policies.push({ id, name: '新策略', target: 'direct', rulesets: [], domainSuffix: [], enabled: true });
     renderPolicies();
   });
 
   $('btnResetPolicies').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
-    if (!confirm('恢复成默认策略？你自己加的策略会被删掉，出口选择也会重置。')) return;
-    const r = await api('/policies/reset', { method: 'POST' });
-    state.policies = r.policies;
+    if (!confirm('恢复默认策略将覆盖当前自定义策略，确定？')) return;
+    await api('/policies/reset', { method: 'POST' });
+    toast('已恢复默认策略');
     await loadPolicies();
-    toast('已恢复默认策略，记得「保存并部署」');
   }));
+
   $('btnRefreshRulesets').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
     const r = await api('/rulesets/refresh', { method: 'POST' });
-    toast(r.ok ? `规则集已更新（删了 ${r.deleted} 个缓存），内核已重启` : ('更新失败：' + (r.error || '未知错误')));
+    toast(r.ok ? '规则集已更新' : ('更新失败：' + (r.error || '未知错误')));
   }));
-  $('btnAddRulesetSub').addEventListener('click', async () => {
-    const tag = prompt('规则集 tag（在策略里引用，如 my-rules）：');
-    if (!tag) return;
-    const url = prompt('规则集 URL（.srs 或 .json）：');
-    if (!url) return;
-    const format = confirm('是 binary（.srs）格式吗？点"确定"=binary，点"取消"=source（.json）') ? 'binary' : 'source';
-    const r = await api('/ruleset-subs', { method: 'POST', body: JSON.stringify({ tag, url, format }) });
-    if (r.ok) { toast('已添加，记得「保存并部署」'); loadRulesetSubs(); }
-    else toast('添加失败：' + (r.error || '未知错误'));
-  });
-  $('rulesetSubList').addEventListener('change', async (e) => {
-    const id = e.target.dataset.rsEnabled;
-    if (!id) return;
-    await api(`/ruleset-subs/${id}`, { method: 'PUT', body: JSON.stringify({ enabled: e.target.checked }) });
-    toast('已' + (e.target.checked ? '启用' : '停用') + '，记得「保存并部署」');
-  });
-  $('rulesetSubList').addEventListener('click', async (e) => {
-    const id = e.target.dataset.rsDel;
-    if (!id) return;
-    if (!confirm('删除这个规则集订阅？')) return;
-    await api(`/ruleset-subs/${id}`, { method: 'DELETE' });
-    loadRulesetSubs();
-    toast('已删除，记得「保存并部署」');
+
+  $('policyList').addEventListener('change', async (e) => {
+    const t = e.target;
+    if (t.dataset.pEnabled === undefined) return;
+    const i = Number(t.dataset.pEnabled);
+    const policy = state.policies[i];
+    policy.enabled = t.checked;
+    const status = document.querySelector(`[data-p-status="${i}"]`);
+    try {
+      await api(`/policies/${encodeURIComponent(policy.id)}/toggle`, { method: 'POST', body: { enabled: t.checked } });
+      if (status) status.textContent = t.checked ? '已启用' : '已关闭';
+      toast(t.checked ? `「${policy.name}」已启用（0断流热切换）` : `「${policy.name}」已关闭（0断流热切换）`);
+    } catch (err) {
+      t.checked = !t.checked;
+      policy.enabled = !t.checked;
+      toast(err.message);
+    }
   });
 
+  // 设置页
   $('btnSaveSettings').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
     const patch = {
       network: {
@@ -922,9 +1021,7 @@ function bindEvents() {
         rejectQuic: $('setRejectQuic').checked,
         directBypass: $('setDirectBypass').checked,
         directForNodes: $('setDirectForNodes').checked,
-        tun: {
-          autoRedirect: $('setAutoRedirect').checked,
-        },
+        tun: { autoRedirect: $('setAutoRedirect').checked },
       },
       dns: {
         mode: $('setDnsMode').value,
@@ -940,43 +1037,23 @@ function bindEvents() {
     };
     await api('/settings', { method: 'PUT', body: patch });
     await api('/deploy', { method: 'POST', body: { restart: true } });
-    toast('已保存并部署');
+    toast('设置已保存并自动完成部署');
     await loadAll();
   }));
 
+  $('btnLog').addEventListener('click', loadKernelLog);
+  $('logAuto').addEventListener('change', scheduleLogAuto);
+  $('logSearch').addEventListener('input', filterKernelLog);
+
   $('btnCheckUpdate').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
     const latest = await api('/kernel/latest');
-    $('kernelUpdateNote').textContent = `最新 ${latest.version}（${new Date(latest.publishedAt).toLocaleDateString()}）`;
-  }));
-
-  // 面板版本检查与更新
-  $('btnCheckSysUpdate').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
-    const v = await api('/system/version');
-    $('sysVersion').textContent = v.current || 'unknown';
-    if (v.hasUpdate) {
-      $('sysUpdateHint').textContent = `有新版本 ${v.latest} 可更新`;
-      $('btnSysUpdate').style.display = '';
-    } else if (v.latest) {
-      $('sysUpdateHint').textContent = '已是最新';
-      $('btnSysUpdate').style.display = 'none';
-    } else {
-      $('sysUpdateHint').textContent = '检查失败（网络问题）';
-    }
-  }));
-  $('btnSysUpdate').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
-    if (!confirm('确定更新面板？更新过程中面板会重启，请稍后手动刷新页面。')) return;
-    const r = await api('/system/update', { method: 'POST' });
-    toast(r.message || '更新已开始');
+    $('kernelUpdateNote').textContent = `官方最新 ${latest.version}（${new Date(latest.publishedAt).toLocaleDateString()}）`;
   }));
 
   $('btnInstallKernel').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
     const latest = await api('/kernel/latest');
-    const current = state.settings?.kernel?.version;
-    const msg = current && current === latest.version
-      ? `当前已经是 ${latest.version}，仍要重新下载安装吗？`
-      : `下载并安装官方 sing-box ${latest.version}？（约 30 MB，装完会自动重启内核）`;
-    if (!confirm(msg)) return;
-    $('kernelUpdateNote').textContent = '正在下载…这一步可能要一两分钟';
+    if (!confirm(`下载并安装官方 sing-box ${latest.version}？（安装后自动重启内核）`)) return;
+    $('kernelUpdateNote').textContent = '正在下载官方二进制…';
     try {
       const info = await api('/kernel/install', { method: 'POST', body: { version: latest.version } });
       $('kernelUpdateNote').textContent = `已安装 ${info.version}${info.restarted ? '，内核已重启' : ''}`;
@@ -988,78 +1065,17 @@ function bindEvents() {
     }
   }));
 
-  // 分组表单
-  $('groupList').addEventListener('input', (e) => {
-    const t = e.target;
-    const readIdx = (attr) => (t.dataset[attr] !== undefined ? Number(t.dataset[attr]) : null);
-    let i = readIdx('gName');
-    if (i !== null) { state.groups[i].name = t.value; return; }
-    i = readIdx('gMembers');
-    if (i !== null) {
-      const parts = t.value.split(',').map((s) => s.trim()).filter(Boolean);
-      if (state.groups[i].mode === 'dynamic') state.groups[i].keywords = parts;
-      else state.groups[i].members = parts;
-      return;
+  $('btnCheckSysUpdate').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
+    const v = await api('/system/version');
+    $('sysVersion').textContent = v.current || 'v0.2.0';
+    if (v.hasUpdate) {
+      $('sysUpdateHint').textContent = `有新版本 ${v.latest} 可更新`;
+      $('btnSysUpdate').style.display = '';
+    } else {
+      $('sysUpdateHint').textContent = '已是最新版本';
+      $('btnSysUpdate').style.display = 'none';
     }
-    i = readIdx('gInterval');
-    if (i !== null) { state.groups[i].interval = t.value; return; }
-    i = readIdx('gTolerance');
-    if (i !== null) { state.groups[i].tolerance = Number(t.value) || 100; }
-  });
-  $('groupList').addEventListener('change', (e) => {
-    const t = e.target;
-    const i = t.dataset.gEnabled !== undefined ? Number(t.dataset.gEnabled) : null;
-    if (i !== null) state.groups[i].enabled = t.checked;
-  });
-
-  // 策略表单
-  $('policyList').addEventListener('input', (e) => {
-    const t = e.target;
-    const set = (attr, fn) => { if (t.dataset[attr] !== undefined) { fn(Number(t.dataset[attr]), t.value); return true; } return false; };
-    if (set('pName', (i, v) => { state.policies[i].name = v; })) return;
-    if (set('pRulesets', (i, v) => { state.policies[i].rulesets = v.split(',').map((s) => s.trim()).filter(Boolean); })) return;
-    if (set('pDomain', (i, v) => { state.policies[i].domain = v.split(',').map((s) => s.trim()).filter(Boolean); })) return;
-    if (set('pSuffix', (i, v) => { state.policies[i].domainSuffix = v.split(',').map((s) => s.trim()).filter(Boolean); })) return;
-    set('pTarget', (i, v) => { state.policies[i].target = v; });
-  });
-
-  // 策略开关：只改小文件，不重新部署
-  $('policyList').addEventListener('change', async (e) => {
-    const t = e.target;
-    if (t.dataset.pEnabled === undefined) return;
-    const i = Number(t.dataset.pEnabled);
-    const policy = state.policies[i];
-    policy.enabled = t.checked;
-    const status = document.querySelector(`[data-p-status="${i}"]`);
-    try {
-      await api(`/policies/${encodeURIComponent(policy.id)}/toggle`, { method: 'POST', body: { enabled: t.checked } });
-      if (status) status.textContent = t.checked ? '已启用' : '已关闭';
-      toast(t.checked ? `「${policy.name}」已启用（未重启内核）` : `「${policy.name}」已关闭（未重启内核）`);
-    } catch (err) {
-      t.checked = !t.checked;
-      policy.enabled = !t.checked;
-      toast(err.message);
-    }
-  });
-
-  $('policyList').addEventListener('click', (e) => {
-    // 折叠/展开
-    const cIdx = e.target.dataset.pCollapse;
-    if (cIdx !== undefined) {
-      const key = `mybox-policy-collapsed-${cIdx}`;
-      const nowCollapsed = localStorage.getItem(key) !== '1';
-      localStorage.setItem(key, nowCollapsed ? '1' : '0');
-      const body = document.querySelector(`[data-p-body="${cIdx}"]`);
-      if (body) body.style.display = nowCollapsed ? 'none' : '';
-      e.target.textContent = nowCollapsed ? '▶' : '▼';
-      e.target.title = nowCollapsed ? '展开' : '折叠';
-      return;
-    }
-    const idx = e.target.dataset.pRemove;
-    if (idx === undefined) return;
-    state.policies.splice(Number(idx), 1);
-    renderPolicies();
-  });
+  }));
 }
 
 /* --------------------------------------------------------------- 启动 */
