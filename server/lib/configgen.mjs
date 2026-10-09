@@ -361,12 +361,6 @@ function buildRoute(settings, names) {
 
   rules.push({ ip_is_private: true, outbound: DIRECT_TAG });
 
-  const bypassPorts = String(network.bypassPorts || '')
-    .split(',')
-    .map((s) => Number.parseInt(s.trim(), 10))
-    .filter((n) => Number.isFinite(n) && n > 0 && n <= 65535);
-  if (bypassPorts.length) rules.push({ port: bypassPorts, outbound: DIRECT_TAG });
-
   for (const p of policies) {
     if (!p.enabled) continue;
     const conditions = policyConditions(p);
@@ -455,7 +449,7 @@ function buildInbounds(settings, bypassSets = []) {
       address: ['172.19.0.1/30'],
       auto_route: network.tun.autoRoute !== false,
       strict_route: Boolean(network.tun.strictRoute),
-      stack: network.tun.stack || 'mixed',
+      // stack/mtu 不写，完全由 sing-box 自己决定（1.15+ 已弃用手动指定）
       udp_timeout: '60s',
       route_exclude_address: [
         '10.0.0.0/8', '100.64.0.0/10', '169.254.0.0/16', '172.16.0.0/12',
@@ -467,7 +461,6 @@ function buildInbounds(settings, bypassSets = []) {
       dns_mode: 'hijack',
       dns_address: ['172.19.0.2'],
     };
-    if (Number(network.tun.mtu) > 0) tun.mtu = Number(network.tun.mtu);
     if (network.ipv6) {
       tun.address.push('fdfe:dcba:9876::1/126');
       tun.route_exclude_address.push('fc00::/7', 'fe80::/10', 'ff00::/8');

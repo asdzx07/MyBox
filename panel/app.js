@@ -506,9 +506,6 @@ function renderPolicies() {
 
 function renderSettings() {
   const s = state.settings;
-  $('setTunStack').value = s.network.tun.stack || 'mixed';
-  $('setTunMtu').value = s.network.tun.mtu || 0;
-  $('setBypassPorts').value = s.network.bypassPorts || '';
   $('setIpv6').checked = Boolean(s.network.ipv6);
   $('setRejectQuic').checked = Boolean(s.network.rejectQuic);
   $('setAutoRedirect').checked = s.network.tun.autoRedirect !== false;
@@ -735,10 +732,7 @@ function bindEvents() {
         rejectQuic: $('setRejectQuic').checked,
         directBypass: $('setDirectBypass').checked,
         directForNodes: $('setDirectForNodes').checked,
-        bypassPorts: $('setBypassPorts').value.trim(),
         tun: {
-          stack: $('setTunStack').value,
-          mtu: Number($('setTunMtu').value) || 0,
           autoRedirect: $('setAutoRedirect').checked,
         },
       },

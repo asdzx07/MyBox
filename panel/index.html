@@ -197,13 +197,6 @@
 
       <div class="card">
         <h3>网络</h3>
-        <div class="row">
-          <label class="field"><span>TUN 协议栈</span>
-            <select id="setTunStack"><option value="mixed">mixed</option><option value="gvisor">gvisor</option><option value="system">system</option></select>
-          </label>
-          <label class="field"><span>TUN MTU（0 = 默认）</span><input id="setTunMtu" type="number" min="0"></label>
-          <label class="field"><span>端口直连（逗号分隔）</span><input id="setBypassPorts" placeholder="例如 22,3389"></label>
-        </div>
         <div class="inline" style="flex-wrap:wrap;gap:16px">
           <label class="inline"><input type="checkbox" id="setIpv6" style="width:auto"> 启用 IPv6</label>
           <label class="inline"><input type="checkbox" id="setRejectQuic" style="width:auto"> 屏蔽 QUIC</label>
@@ -212,6 +205,7 @@
           <label class="inline"><input type="checkbox" id="setDirectForNodes" style="width:auto"> 节点服务器直连</label>
         </div>
         <p class="note" style="margin-top:10px">
+          TUN 协议栈由 sing-box 自动管理，无需手动设置。<br>
           「直连不进内核」把「目标是直连」的策略所涉及的 IP 集合从 tun 路由里排除，
           这些流量根本不经过内核，直连零开销。
         </p>
