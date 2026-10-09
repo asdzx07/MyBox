@@ -1,13 +1,31 @@
 import path from 'node:path';
 import { KERNEL, DATA_DIR, RULESET_DIR } from './paths.mjs';
 import { flipTag } from './flip.mjs';
-import { BUILTIN_OUTBOUNDS } from './settings.mjs';
+
 
 const GEOSITE_BASE = 'https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set';
 const GEOIP_BASE = 'https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set';
 
 export const DIRECT_TAG = '直连';
 export const BLOCK_TAG = '拒绝';
+
+/**
+ * 内置出站。
+ *
+ * 「直连」为什么带 `inet4_bind_address: 0.0.0.0`：
+ * sing-box 的 detour 校验里，指向一个「字段全默认」的 direct 出站会直接 FATAL
+ * （common/dialer/detour.go 的 "detour to an empty direct outbound makes no
+ * sense"）。而直连 DNS 又必须显式 detour 到「直连」——不写 detour 的话它会用
+ * 默认出站，也就是走代理；代理服务器的域名又要靠直连 DNS 解析，直接死锁
+ * （表现为内核卡在下载规则集，全 LAN 断 DNS）。
+ *
+ * 绑定 0.0.0.0 对客户端 socket 来说等价于不绑（系统默认行为），语义上无副作用，
+ * 但让这个出站不再是「空」的，detour 校验就能过。
+ */
+export const BUILTIN_OUTBOUND_LIST = [
+  { tag: DIRECT_TAG, type: 'direct', inet4_bind_address: '0.0.0.0' },
+  { tag: BLOCK_TAG, type: 'block' },
+];
 /**
  * 兜底出站。
  *
@@ -146,14 +164,14 @@ function buildOutbounds(settings) {
     outbounds.push(clean(n));
   }
 
-  for (const b of BUILTIN_OUTBOUNDS) {
+  for (const b of BUILTIN_OUTBOUND_LIST) {
     if (!tags.has(b.tag)) {
       tags.add(b.tag);
       outbounds.push({ ...b });
     }
   }
 
-  const nodeTags = [...tags].filter((t) => !BUILTIN_OUTBOUNDS.some((b) => b.tag === t));
+  const nodeTags = [...tags].filter((t) => !BUILTIN_OUTBOUND_LIST.some((b) => b.tag === t));
 
   for (const g of settings.groups) {
     if (!g.enabled) continue;
@@ -239,8 +257,12 @@ function buildDns(settings, names) {
       tag: 'dns-direct',
       server: dns.direct === 'wan' ? '223.5.5.5' : (dns.directAddress || '223.5.5.5'),
       server_port: Number(dns.directPort) || 53,
-      // 故意不写 detour：直连 DNS 走默认出站即可。
-      // 写 detour: '直连' 会命中 sing-box 的「空 direct 出站」校验直接 FATAL。
+      // 必须显式 detour 到「直连」。
+      //
+      // 不写的话它会用默认出站——而 route.final 指向兜底（代理），于是「直连 DNS」
+      // 实际走代理；代理服务器的域名又要靠这个 DNS 解析，形成死锁：内核卡在
+      // 下载规则集，dnsmasq 指向的 DNS 端口一直没起来，全 LAN 断解析。
+      detour: DIRECT_TAG,
     },
     {
       type: dns.proxyProtocol || 'tcp',
@@ -395,7 +417,8 @@ function buildRoute(settings, names) {
         format: 'binary',
         url,
         update_interval: '24h',
-        download_detour: DIRECT_TAG,
+        // 不写 download_detour：1.14 起已弃用（会打 WARN），默认走兜底出站，
+        // 而兜底是代理——从国内拉 GitHub 上的规则集走代理反而更稳。
       });
     }
   }

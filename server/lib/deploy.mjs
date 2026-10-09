@@ -183,11 +183,14 @@ async function deployInner({ restart = true, skipNetwork = false } = {}) {
     } catch (err) {
       log.error('内核启动失败：%s', err.message);
       if (previousConfig) fs.writeFileSync(CONFIG_PATH, previousConfig);
+      // 内核没起来，dnsmasq 却指着它的 DNS 端口 → 全 LAN 无解析。
+      // 必须在这里还回去，不能等看门狗（那要几十秒，用户已经在骂了）。
+      await netstack.restoreDnsmasq();
       report.errors.push(`内核启动失败：${err.message}`);
       mutateSettings((s) => {
         s.meta.lastDeployError = err.message;
       });
-      throw new Error(`内核启动失败，配置已回滚：${err.message}`);
+      throw new Error(`内核启动失败，配置已回滚、DNS 已还原：${err.message}`);
     }
   }
 

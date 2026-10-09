@@ -68,6 +68,11 @@ mutateSettings((s) => {
   s.groups[0].members = SAMPLE_NODES.map((n) => n.tag);
   // 非 Linux 上建不出 tun，冒烟测试跑不起来，本地只验配置生成
   if (process.platform !== 'linux') s.network.tun.enabled = false;
+
+  // 自检要自成一体：去掉远程规则集，不然样例节点域名是假的、规则集下不下来，
+  // 内核会因为网络原因起不来，掩盖真正想测的结构问题。
+  // 规则集 URL 是否可下载由部署时的校验负责。
+  for (const p of s.policies) p.rulesets = [];
 });
 
 const settings = loadSettings({ force: true });

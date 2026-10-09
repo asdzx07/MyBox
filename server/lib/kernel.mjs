@@ -258,7 +258,7 @@ export async function isResponding(timeoutMs = 2500) {
 }
 
 /** 轮询等内核真的起来。 */
-async function waitForResponding(timeoutMs = 25000) {
+async function waitForResponding(timeoutMs = 90000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (await isResponding()) return true;

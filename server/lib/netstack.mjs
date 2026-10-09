@@ -115,6 +115,35 @@ async function globalOptionAlreadySet(option, confDir) {
   return null;
 }
 
+/**
+ * 找出真实的上游 DNS，用作接管失败时的兜底。
+ *
+ * 为什么不直接用备份值：如果之前已经装过别的代理面板（比如 Open-Box），
+ * dnsmasq 的 server 本来就指向那个面板的 DNS 端口。这种情况下「还原备份」
+ * 等于还原成一个已经没人监听的地址，全 LAN 还是解析不了。
+ */
+async function discoverUpstreamDns() {
+  for (const file of ['/tmp/resolv.conf.d/resolv.conf.auto', '/tmp/resolv.conf.auto', '/etc/resolv.conf']) {
+    try {
+      const lines = fs.readFileSync(file, 'utf8').split('\n');
+      const found = lines
+        .filter((l) => /^\s*nameserver\s+/.test(l))
+        .map((l) => l.trim().split(/\s+/)[1])
+        .filter((ip) => ip && !ip.startsWith('127.') && ip !== '::1');
+      if (found.length) return found.slice(0, 2);
+    } catch {
+      /* 下一个 */
+    }
+  }
+  return ['223.5.5.5', '119.29.29.29'];
+}
+
+/** 备份里指向内核自己 DNS 端口的条目要剔除，否则还原后全 LAN 无解析。 */
+function sanitizeDnsBackup(servers, ownPort) {
+  const kept = (servers ?? []).filter((s) => !s.includes(`#${ownPort}`) && !s.includes(`:${ownPort}`));
+  return kept.length ? kept : null;
+}
+
 async function uciGet(option) {
   const r = await run('uci', ['-q', 'get', option]);
   if (!r.ok || !r.out) return null;
@@ -134,10 +163,19 @@ async function uciCommit() {
  */
 async function applyDnsmasqOpenWrt({ dnsPort, listen }) {
   const section = 'dhcp.@dnsmasq[0]';
+  const currentServers = await uciGet(`${section}.server`);
+
+  // 剔除指向内核自己端口的条目：装了别的代理面板时原值可能就是那个端口，
+  // 留着它会让「还原」变成一个死地址。
+  const cleanServers = sanitizeDnsBackup(currentServers, dnsPort);
   const before = {
-    server: await uciGet(`${section}.server`),
+    server: cleanServers ?? await discoverUpstreamDns(),
     noresolv: await uciGet(`${section}.noresolv`),
+    replacedSelfReferential: Boolean(currentServers && !cleanServers),
   };
+  if (before.replacedSelfReferential) {
+    log.warn('原 dnsmasq 上游指向 %s#%d（已失效的代理面板），还原时将改用真实上游 DNS', listen, dnsPort);
+  }
 
   await run('uci', ['-q', 'delete', `${section}.server`]);
   await run('uci', ['-q', 'add_list', `${section}.server=${listen}#${dnsPort}`]);
@@ -158,8 +196,12 @@ async function applyDnsmasqOpenWrt({ dnsPort, listen }) {
 
 async function uciRollbackDnsmasq(before) {
   const section = 'dhcp.@dnsmasq[0]';
+  // 备份为空（或原本就没设过）时用真实上游 DNS，不能留空——
+  // 留空 + noresolv 被删掉的话还能靠 resolv.conf 兜住，但显式给更稳。
+  const servers = before?.server?.length ? before.server : await discoverUpstreamDns();
+
   await run('uci', ['-q', 'delete', `${section}.server`]);
-  for (const v of before?.server ?? []) {
+  for (const v of servers) {
     await run('uci', ['-q', 'add_list', `${section}.server=${v}`]);
   }
   if (before?.noresolv?.length) {
