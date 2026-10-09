@@ -239,7 +239,7 @@ async function loadConnections() {
       <div class="item">
         <div class="grow">
           <div class="title">${escapeHtml(c.host || '(无域名)')}</div>
-          <div class="sub">${escapeHtml(c.rule || '')} · ${escapeHtml(c.chain.join(' → '))}</div>
+          <div class="sub">${escapeHtml(c.rule || '')} · ${escapeHtml([...c.chain].reverse().join(' → '))}</div>
         </div>
         <span class="tag muted">${escapeHtml(c.network)}</span>
       </div>
@@ -333,7 +333,7 @@ async function loadOverviewConns() {
       <div class="mini-row">
         <div class="grow">
           <div class="name">${escapeHtml(c.host || '(无域名)')}</div>
-          <div class="sub">${escapeHtml(c.chain.join(' → '))}${c.rule ? ` · ${escapeHtml(c.rule)}` : ''}</div>
+          <div class="sub">${escapeHtml([...c.chain].reverse().join(' → '))}${c.rule ? ` · ${escapeHtml(c.rule)}` : ''}</div>
         </div>
         <span class="tag muted">${escapeHtml(c.network || '')}</span>
       </div>`).join('')}</div>`;
