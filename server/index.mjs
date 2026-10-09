@@ -19,7 +19,7 @@ import { startTrafficMonitor, getTraffic, resetTrafficTotals } from './lib/traff
 import * as deploy from './lib/deploy.mjs';
 import * as netstack from './lib/netstack.mjs';
 import * as platform from './lib/platform.mjs';
-import { flipTag } from './lib/flip.mjs';
+import { flipTag, setFlip } from './lib/flip.mjs';
 import { loadSavedClients, saveClients, scanLocalNetworkClients } from './lib/clients.mjs';
 
 const log = createLogger('panel');
@@ -333,7 +333,7 @@ app.get('/api/groups', (req, res) => {
   res.json({ groups, availableNodes: nodes.map((n) => n.tag) });
 });
 
-app.put('/api/groups', (req, res) => {
+app.put('/api/groups', async (req, res) => {
   const list = req.body?.groups;
   if (!Array.isArray(list)) return res.status(400).json({ error: 'groups 必须是数组' });
   const clean = list.map((g) => ({
@@ -353,6 +353,12 @@ app.put('/api/groups', (req, res) => {
   mutateSettings((s) => {
     s.groups = clean;
   });
+  try {
+    await deploy.deploy({ restart: true });
+    log.info('分组配置保存并已部署生效');
+  } catch (err) {
+    log.warn('分组保存后部署警告：%s', err.message);
+  }
   res.json({ ok: true, groups: clean });
 });
 
@@ -380,7 +386,7 @@ app.get('/api/policies', (req, res) => {
   });
 });
 
-app.put('/api/policies', (req, res) => {
+app.put('/api/policies', async (req, res) => {
   const list = req.body?.policies;
   if (!Array.isArray(list)) return res.status(400).json({ error: 'policies 必须是数组' });
   const clean = list.map((p) => {
@@ -402,6 +408,15 @@ app.put('/api/policies', (req, res) => {
   mutateSettings((s) => {
     s.policies = clean;
   });
+  for (const p of clean) {
+    try { setFlip(p.id, p.enabled); } catch {}
+  }
+  try {
+    await deploy.deploy({ restart: true });
+    log.info('策略配置保存并已部署生效');
+  } catch (err) {
+    log.warn('策略保存后部署警告：%s', err.message);
+  }
   res.json({ ok: true, policies: clean });
 });
 
@@ -412,11 +427,19 @@ app.put('/api/policies', (req, res) => {
  * 混在一起，按名字"保留用户选择"会把「国内」这种本该直连的策略指到代理组上。
  * 恢复默认就是恢复默认，要保留自己的配置请用「导出设置」。
  */
-app.post('/api/policies/reset', (req, res) => {
+app.post('/api/policies/reset', async (req, res) => {
   const next = DEFAULT_POLICIES.map((p) => ({ ...p }));
   mutateSettings((s) => {
     s.policies = next;
   });
+  for (const p of next) {
+    try { setFlip(p.id, p.enabled); } catch {}
+  }
+  try {
+    await deploy.deploy({ restart: true });
+  } catch (err) {
+    log.warn('重置策略后部署警告：%s', err.message);
+  }
   res.json({ ok: true, policies: next });
 });
 

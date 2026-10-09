@@ -355,12 +355,16 @@ function buildDns(settings, names) {
       if (p.domainSuffix?.length) conditions.push({ domain_suffix: [...p.domainSuffix] });
       if (!conditions.length) continue;
 
+      const matchRule = conditions.length === 1
+        ? conditions[0]
+        : { type: 'logical', mode: 'or', rules: conditions };
+
       const target = resolveTarget(p.target, settings);
       const isProxy = target !== DIRECT_TAG && target !== BLOCK_TAG;
       rules.push({
         type: 'logical',
         mode: 'and',
-        rules: [...conditions, { rule_set: [flipTag(p.id)] }],
+        rules: [matchRule, { rule_set: [flipTag(p.id)] }],
         server: isProxy ? proxyServerTag : 'dns-direct',
       });
     }
@@ -412,6 +416,10 @@ function buildRoute(settings, names) {
     const target = resolveTarget(p.target, settings);
     if (!names.has(target)) continue;
 
+    const matchRule = conditions.length === 1
+      ? conditions[0]
+      : { type: 'logical', mode: 'or', rules: conditions };
+
     const switchRule = { rule_set: [flipTag(p.id)] };
     const isProxy = target !== DIRECT_TAG && target !== BLOCK_TAG;
 
@@ -419,7 +427,7 @@ function buildRoute(settings, names) {
       rules.push({
         type: 'logical',
         mode: 'and',
-        rules: [...conditions, switchRule, { network: 'udp', port: 443 }],
+        rules: [matchRule, switchRule, { network: 'udp', port: 443 }],
         action: 'reject',
       });
     }
@@ -435,7 +443,7 @@ function buildRoute(settings, names) {
     rules.push({
       type: 'logical',
       mode: 'and',
-      rules: [...conditions, ...domainCheck, switchRule],
+      rules: [matchRule, ...domainCheck, switchRule],
       outbound: target,
     });
   }

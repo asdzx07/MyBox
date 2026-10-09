@@ -467,53 +467,91 @@ async function loadOverviewGroups() {
 
 /* --------------------------------------------------------------- 当前连接 */
 
-async function loadConnectionsPage() {
+let connCache = { connections: [], uploadTotal: 0, downloadTotal: 0 };
+
+function renderConnections() {
   const countEl = $('connPageCount');
+  const listEl = $('connsList');
+  if (!listEl) return;
+
+  const conns = connCache.connections || [];
+  const query = ($('connSearch')?.value || '').trim().toLowerCase();
+
+  const filtered = query
+    ? conns.filter((c) => {
+        const host = (c.metadata?.host || c.metadata?.destinationIP || '').toLowerCase();
+        const port = String(c.metadata?.destinationPort || '');
+        const src = (c.metadata?.sourceIP || '').toLowerCase();
+        const proto = (c.metadata?.network || '').toLowerCase();
+        const chain = (c.chains || []).join(' ').toLowerCase();
+        const rule = (c.rule || '').toLowerCase();
+        return host.includes(query) || port.includes(query) || src.includes(query) ||
+               proto.includes(query) || chain.includes(query) || rule.includes(query);
+      })
+    : conns;
+
+  if (countEl) {
+    if (query) {
+      countEl.textContent = `匹配 ${filtered.length} / 共 ${conns.length} 条连接`;
+    } else {
+      countEl.textContent = `${conns.length} 条连接 · 累计 ↓ ${fmtBytes(connCache.downloadTotal || 0)} / ↑ ${fmtBytes(connCache.uploadTotal || 0)}`;
+    }
+  }
+
+  if (!filtered.length) {
+    listEl.innerHTML = query
+      ? '<p class="note" style="padding:16px 0;text-align:center">未找到匹配的连接</p>'
+      : '<p class="note" style="padding:16px 0;text-align:center">当前没有活动连接</p>';
+    return;
+  }
+
+  listEl.innerHTML = `<div class="list">${filtered.map((c) => {
+    const host = escapeHtml(c.metadata?.host || c.metadata?.destinationIP || '—');
+    const port = c.metadata?.destinationPort ? `:${c.metadata.destinationPort}` : '';
+    const src = escapeHtml(c.metadata?.sourceIP || '');
+    const proto = escapeHtml((c.metadata?.network || '').toUpperCase());
+    const chain = (c.chains || []).map(escapeHtml).join(' → ');
+    const rule = escapeHtml(c.rule || '');
+    const id = encodeURIComponent(c.id || '');
+    return `
+      <div class="conn-item">
+        <div class="conn-main">
+          <div class="conn-header">
+            <span class="conn-target" title="${host}${port}">${host}${port}</span>
+            <span class="tag muted conn-proto">${proto}</span>
+            ${rule ? `<span class="tag conn-rule" title="${rule}">${rule}</span>` : ''}
+          </div>
+          <div class="conn-meta-sub">
+            <span>源: ${src}</span>
+            <span class="conn-sep">·</span>
+            <span>链路: ${chain || '直连'}</span>
+          </div>
+        </div>
+        <div class="conn-stats-col">
+          <div class="conn-traffic">
+            <span class="tf-down">↓ ${fmtBytes(c.download || 0)}</span>
+            <span class="tf-sep">/</span>
+            <span class="tf-up">↑ ${fmtBytes(c.upload || 0)}</span>
+          </div>
+          ${c.id ? `<button class="small conn-btn-close" onclick="closeSingleConn('${id}')">断开</button>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('')}</div>`;
+}
+
+async function loadConnectionsPage() {
   const listEl = $('connsList');
   try {
     const data = await api('/connections');
-    const conns = data.connections || [];
-    countEl.textContent = `${conns.length} 条连接 · 累计 ↓ ${fmtBytes(data.downloadTotal || 0)} / ↑ ${fmtBytes(data.uploadTotal || 0)}`;
-
-    if (!conns.length) {
-      listEl.innerHTML = '<p class="note" style="padding:16px 0;text-align:center">当前没有活动连接</p>';
-      return;
-    }
-    listEl.innerHTML = `<div class="list">${conns.map((c) => {
-      const host = escapeHtml(c.metadata?.host || c.metadata?.destinationIP || '—');
-      const port = c.metadata?.destinationPort ? `:${c.metadata.destinationPort}` : '';
-      const src = escapeHtml(c.metadata?.sourceIP || '');
-      const proto = escapeHtml((c.metadata?.network || '').toUpperCase());
-      const chain = (c.chains || []).map(escapeHtml).join(' → ');
-      const rule = escapeHtml(c.rule || '');
-      const id = encodeURIComponent(c.id || '');
-      return `
-        <div class="conn-item">
-          <div class="conn-main">
-            <div class="conn-header">
-              <span class="conn-target" title="${host}${port}">${host}${port}</span>
-              <span class="tag muted conn-proto">${proto}</span>
-              ${rule ? `<span class="tag conn-rule" title="${rule}">${rule}</span>` : ''}
-            </div>
-            <div class="conn-meta-sub">
-              <span>源: ${src}</span>
-              <span class="conn-sep">·</span>
-              <span>链路: ${chain || '直连'}</span>
-            </div>
-          </div>
-          <div class="conn-stats-col">
-            <div class="conn-traffic">
-              <span class="tf-down">↓ ${fmtBytes(c.download || 0)}</span>
-              <span class="tf-sep">/</span>
-              <span class="tf-up">↑ ${fmtBytes(c.upload || 0)}</span>
-            </div>
-            ${c.id ? `<button class="small conn-btn-close" onclick="closeSingleConn('${id}')">断开</button>` : ''}
-          </div>
-        </div>
-      `;
-    }).join('')}</div>`;
+    connCache = {
+      connections: data.connections || [],
+      uploadTotal: data.uploadTotal || 0,
+      downloadTotal: data.downloadTotal || 0,
+    };
+    renderConnections();
   } catch (err) {
-    listEl.innerHTML = `<p class="err-text" style="padding:16px 0">${escapeHtml(err.message)}</p>`;
+    if (listEl) listEl.innerHTML = `<p class="err-text" style="padding:16px 0">${escapeHtml(err.message)}</p>`;
   }
 }
 
@@ -528,13 +566,13 @@ window.closeSingleConn = async function(id) {
 };
 
 window.closeAllConnections = async function() {
-  if (!confirm('确定断开所有当前活动连接吗？（客户端会自动重连）')) return;
+  if (!confirm('确定清空并断开所有当前活动连接吗？（客户端会自动重连）')) return;
   try {
     await api('/connections', { method: 'DELETE' });
-    toast('已断开所有连接');
+    toast('已清空所有连接');
     await loadConnectionsPage();
   } catch (err) {
-    toast(`断开失败：${err.message}`);
+    toast(`清空失败：${err.message}`);
   }
 };
 
@@ -1301,7 +1339,7 @@ function bindEvents() {
     renderGroups();
     // 联动刷新策略下拉框中的分组列表
     if (state.policies?.length) renderPolicies();
-    toast('分组已保存，记得「部署配置」生效');
+    toast('分组已保存并已部署生效（内核已应用）');
   }));
 
   $('groupList')?.addEventListener('input', (e) => {
@@ -1358,7 +1396,17 @@ function bindEvents() {
   });
 
   // 连接页
-  $('btnConnsRefresh').addEventListener('click', (e) => withBusy(e.currentTarget, loadConnectionsPage));
+  $('btnConnsRefresh')?.addEventListener('click', (e) => withBusy(e.currentTarget, loadConnectionsPage));
+  $('btnCloseAllConns')?.addEventListener('click', closeAllConnections);
+  $('connSearch')?.addEventListener('input', renderConnections);
+  $('btnClearConnSearch')?.addEventListener('click', () => {
+    const input = $('connSearch');
+    if (input) {
+      input.value = '';
+      input.focus();
+    }
+    renderConnections();
+  });
 
   // 订阅页
   $('btnAddSub').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
@@ -1449,7 +1497,7 @@ function bindEvents() {
     const res = await api('/policies', { method: 'PUT', body: { policies: state.policies } });
     if (res?.policies) state.policies = res.policies;
     renderPolicies();
-    toast('策略已保存，改动已写入配置');
+    toast('策略已保存并已部署生效（内核已应用）');
   }));
 
   $('btnAddPolicy').addEventListener('click', () => {
