@@ -84,7 +84,9 @@ export async function installKernel(version, { onProgress = () => {} } = {}) {
 
   let lastError;
   for (const mirror of MIRRORS) {
-    const url = `${mirror}/https://github.com/${REPO}/releases/download/${version}/${asset}`;
+    const base = `https://github.com/${REPO}/releases/download/${version}/${asset}`;
+    // mirror 为空表示直连，不能拼成 "/https://..." —— 那是个非法 URL，fetch 直接抛
+    const url = mirror ? `${mirror}/${base}` : base;
     try {
       onProgress(`下载 ${asset}${mirror ? `（镜像 ${mirror}）` : ''}`);
       const size = await download(url, tarball);
@@ -95,7 +97,7 @@ export async function installKernel(version, { onProgress = () => {} } = {}) {
       lastError = err;
     }
   }
-  if (lastError) throw new Error(`下载内核失败：${lastError.message}`);
+  if (lastError) throw new Error(`下载内核失败（直连和镜像都试过了）：${lastError.message}`);
 
   onProgress('解包');
   await execFileAsync('tar', ['-xzf', tarball, '-C', tmpDir]);
@@ -109,8 +111,14 @@ export async function installKernel(version, { onProgress = () => {} } = {}) {
   const buf = fs.readFileSync(src);
   const sha256 = createHash('sha256').update(buf).digest('hex');
 
-  fs.copyFileSync(src, SINGBOX_BIN);
-  fs.chmodSync(SINGBOX_BIN, 0o755);
+  // 不能直接覆盖正在运行的内核——Linux 会报 ETXTBSY（text file busy）。
+  // 先写到同目录的临时文件，再 rename 原子替换：运行中的进程保留旧 inode，
+  // 替换本身不受影响，重启内核后才切到新二进制。
+  const staged = path.join(BIN_DIR, '.sing-box.new');
+  fs.copyFileSync(src, staged);
+  fs.chmodSync(staged, 0o755);
+  fs.renameSync(staged, SINGBOX_BIN);
+
   fs.rmSync(tarball, { force: true });
   fs.rmSync(path.join(tmpDir, extracted), { recursive: true, force: true });
 

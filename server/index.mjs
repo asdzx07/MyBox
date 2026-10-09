@@ -113,7 +113,12 @@ function sanitize(settings) {
   return { ...rest, panel: { passwordSet: Boolean(panel.passwordHash) } };
 }
 
-app.get('/api/settings', (req, res) => res.json(sanitize(loadSettings({ force: true }))));
+app.get('/api/settings', async (req, res) => {
+  const data = sanitize(loadSettings({ force: true }));
+  // 版本以磁盘上的实际内核为准，不看 settings 里那份（可能是安装脚本装的、没记进来）
+  data.kernel = { ...data.kernel, version: await kernel.installedVersion(), installed: kernel.installed() };
+  res.json(data);
+});
 
 app.put('/api/settings', (req, res) => {
   const incoming = req.body || {};
@@ -306,8 +311,18 @@ app.post('/api/kernel/:action', async (req, res) => {
     if (action === 'install') {
       const version = req.body?.version;
       if (!version) return res.status(400).json({ error: '缺少 version' });
+      const wasRunning = (await kernel.status()).running;
       const info = await kernel.installKernel(version, { onProgress: (m) => log.info('%s', m) });
-      return res.json(info);
+      // 新二进制要重启内核才生效（替换是 rename 做的，老进程还跑着旧的）
+      if (wasRunning) {
+        try {
+          await kernel.restart();
+          log.info('内核已用 %s 重启', version);
+        } catch (err) {
+          log.warn('内核重启失败，请手动检查：%s', err.message);
+        }
+      }
+      return res.json({ ...info, restarted: wasRunning });
     }
     return res.status(400).json({ error: '未知操作' });
   } catch (err) {
@@ -328,6 +343,133 @@ app.get('/api/kernel/latest', async (req, res) => {
 });
 
 /* ------------------------------------------- 内核 Clash API 反向代理 */
+
+/** 调内核的 Clash API。带上 secret（如果配了）。 */
+async function clashApi(pathname, options = {}) {
+  const settings = loadSettings();
+  const res = await fetch(`http://${KERNEL.clashApiHost}:${KERNEL.clashApiPort}${pathname}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(settings.kernel.clashSecret ? { Authorization: `Bearer ${settings.kernel.clashSecret}` } : {}),
+      ...(options.headers || {}),
+    },
+    signal: AbortSignal.timeout(20000),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(text || `内核返回 HTTP ${res.status}`);
+  return text ? JSON.parse(text) : null;
+}
+
+/**
+ * 节点与分组状态。
+ *
+ * 以内核的 Clash API 为准，而不是面板里存的订阅解析结果——只有前者反映
+ * 当前真实在跑的配置（节点有没有起来、分组选中了谁）。
+ */
+app.get('/api/nodes/status', async (req, res) => {
+  try {
+    const data = await clashApi('/proxies');
+    const proxies = data?.proxies ?? {};
+    const groups = [];
+    const nodes = [];
+    const groupTypes = new Set(['Selector', 'URLTest', 'Fallback', 'LoadBalance']);
+
+    for (const [name, p] of Object.entries(proxies)) {
+      if (name === 'GLOBAL') continue;
+      if (groupTypes.has(p.type)) {
+        groups.push({
+          name,
+          type: p.type,
+          now: p.now ?? null,
+          members: p.all ?? [],
+        });
+      } else if (p.type !== 'Direct' && p.type !== 'Reject' && p.type !== 'Compatible') {
+        nodes.push({ name, type: p.type, udp: p.udp !== false });
+      }
+    }
+
+    res.json({
+      groups: groups.sort((a, b) => (a.type === 'Selector' ? -1 : 1) - (b.type === 'Selector' ? -1 : 1)),
+      nodes: nodes.sort((a, b) => a.name.localeCompare(b.name)),
+    });
+  } catch (err) {
+    res.status(502).json({ error: `读取节点状态失败：${err.message}` });
+  }
+});
+
+/** 切换分组选中的节点。走内核的 Clash API，不重启、不断流。 */
+app.put('/api/nodes/select', async (req, res) => {
+  const { group, name } = req.body || {};
+  if (!group || !name) return res.status(400).json({ error: '缺少 group 或 name' });
+  try {
+    await clashApi(`/proxies/${encodeURIComponent(group)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name }),
+    });
+    log.info('切换分组 %s → %s', group, name);
+    res.json({ ok: true, group, name });
+  } catch (err) {
+    res.status(502).json({ error: `切换失败：${err.message}` });
+  }
+});
+
+/** 测某个节点的延迟。 */
+app.get('/api/nodes/latency', async (req, res) => {
+  const name = req.query.name;
+  if (!name) return res.status(400).json({ error: '缺少 name' });
+  const url = req.query.url || 'http://www.gstatic.com/generate_204';
+  const timeout = Number(req.query.timeout) || 5000;
+  try {
+    const r = await clashApi(
+      `/proxies/${encodeURIComponent(name)}/delay?url=${encodeURIComponent(url)}&timeout=${timeout}`,
+    );
+    res.json({ name, delay: r?.delay ?? null, error: null });
+  } catch (err) {
+    // 超时/不可达是正常结果，不是服务端错误
+    res.json({ name, delay: null, error: err.message.replace(/^.*内核返回 /, '') });
+  }
+});
+
+/** 一次性测一批节点（串行，避免同时打太多连接）。 */
+app.post('/api/nodes/latency/batch', async (req, res) => {
+  const names = Array.isArray(req.body?.names) ? req.body.names.slice(0, 200) : [];
+  const url = req.body?.url || 'http://www.gstatic.com/generate_204';
+  const timeout = Number(req.body?.timeout) || 5000;
+  const results = {};
+  for (const name of names) {
+    try {
+      const r = await clashApi(
+        `/proxies/${encodeURIComponent(name)}/delay?url=${encodeURIComponent(url)}&timeout=${timeout}`,
+      );
+      results[name] = { delay: r?.delay ?? null, error: null };
+    } catch (err) {
+      results[name] = { delay: null, error: err.message.replace(/^.*内核返回 /, '') };
+    }
+  }
+  res.json({ results });
+});
+
+/** 实时连接数（概览用）。 */
+app.get('/api/nodes/connections', async (req, res) => {
+  try {
+    const data = await clashApi('/connections');
+    const list = data?.connections ?? [];
+    res.json({
+      total: list.length,
+      uploadTotal: data?.uploadTotal ?? 0,
+      downloadTotal: data?.downloadTotal ?? 0,
+      recent: list.slice(0, 30).map((c) => ({
+        host: c.metadata?.host || c.metadata?.destinationIP || '',
+        rule: c.rule || '',
+        chain: c.chains || [],
+        network: c.metadata?.network || '',
+      })),
+    });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
 
 app.use('/api/controller', async (req, res) => {
   const settings = loadSettings();

@@ -103,6 +103,152 @@ function showApp() {
   return loadAll();
 }
 
+/* --------------------------------------------------------------- 节点 */
+
+state.nodeGroups = [];
+state.nodeList = [];
+state.latency = {};
+
+const GROUP_LABEL = { Selector: '手动选择', URLTest: '自动择优', Fallback: '故障转移', LoadBalance: '负载均衡' };
+
+async function loadNodes() {
+  try {
+    const data = await api('/nodes/status');
+    state.nodeGroups = data.groups || [];
+    state.nodeList = data.nodes || [];
+    renderNodeGroups();
+    renderNodeList();
+  } catch (err) {
+    $('nodeGroups').innerHTML = `<p class="err-text">${escapeHtml(err.message)}</p>`;
+    $('nodeList').innerHTML = '';
+  }
+}
+
+function delayBadge(name) {
+  const entry = state.latency[name];
+  if (!entry) return '';
+  if (entry.pending) return '<span class="tag muted">测速中…</span>';
+  if (entry.delay === null || entry.delay === undefined) return '<span class="tag err">超时</span>';
+  const cls = entry.delay < 200 ? 'ok' : 'muted';
+  return `<span class="tag ${cls}">${entry.delay} ms</span>`;
+}
+
+function renderNodeGroups() {
+  const box = $('nodeGroups');
+  if (!state.nodeGroups.length) {
+    box.innerHTML = '<p class="note">内核没有返回任何分组。可能内核没在运行，或还没有部署配置。</p>';
+    return;
+  }
+  box.innerHTML = state.nodeGroups.map((g) => `
+    <div class="card" style="background:var(--surface-2);margin-bottom:10px">
+      <div class="card-head">
+        <h3>${escapeHtml(g.name)}</h3>
+        <span class="tag">${GROUP_LABEL[g.type] || g.type}</span>
+        <span class="tag muted">${g.members.length} 个成员</span>
+        <div class="spacer"></div>
+        <span class="note">当前：<strong>${escapeHtml(g.now || '—')}</strong></span>
+      </div>
+      <div class="list">
+        ${g.members.map((m) => `
+          <div class="item" data-select-group="${escapeHtml(g.name)}" data-select-name="${escapeHtml(m)}"
+               style="cursor:pointer;${m === g.now ? 'outline:1px solid var(--accent)' : ''}">
+            <div class="grow">
+              <div class="title">${m === g.now ? '● ' : ''}${escapeHtml(m)}</div>
+            </div>
+            ${delayBadge(m)}
+            <button class="small" data-latency="${escapeHtml(m)}">测速</button>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderNodeList() {
+  $('nodeCount').textContent = `${state.nodeList.length} 个`;
+  const box = $('nodeList');
+  if (!state.nodeList.length) {
+    box.innerHTML = '<p class="note">没有节点。先在「订阅」页添加订阅并刷新，然后部署配置。</p>';
+    return;
+  }
+  box.innerHTML = state.nodeList.map((n) => `
+    <div class="item">
+      <div class="grow">
+        <div class="title">${escapeHtml(n.name)}</div>
+        <div class="sub">${escapeHtml(n.type)}${n.udp ? ' · UDP' : ''}</div>
+      </div>
+      ${delayBadge(n.name)}
+      <button class="small" data-latency="${escapeHtml(n.name)}">测速</button>
+    </div>
+  `).join('');
+}
+
+async function testLatency(name) {
+  state.latency[name] = { pending: true };
+  renderNodeGroups();
+  renderNodeList();
+  try {
+    const r = await api(`/nodes/latency?name=${encodeURIComponent(name)}`);
+    state.latency[name] = { delay: r.delay, error: r.error };
+  } catch (err) {
+    state.latency[name] = { delay: null, error: err.message };
+  }
+  renderNodeGroups();
+  renderNodeList();
+}
+
+async function testAll() {
+  const names = state.nodeList.map((n) => n.name);
+  if (!names.length) return;
+  names.forEach((n) => { state.latency[n] = { pending: true }; });
+  renderNodeGroups();
+  renderNodeList();
+  toast(`正在测 ${names.length} 个节点…`);
+  try {
+    const { results } = await api('/nodes/latency/batch', { method: 'POST', body: { names } });
+    Object.assign(state.latency, results);
+  } catch (err) {
+    toast(err.message);
+  }
+  renderNodeGroups();
+  renderNodeList();
+}
+
+async function switchNode(group, name) {
+  try {
+    await api('/nodes/select', { method: 'PUT', body: { group, name } });
+    const g = state.nodeGroups.find((x) => x.name === group);
+    if (g) g.now = name;
+    renderNodeGroups();
+    toast(`${group} → ${name}`);
+  } catch (err) {
+    toast(err.message);
+    await loadNodes();
+  }
+}
+
+async function loadConnections() {
+  try {
+    const data = await api('/nodes/connections');
+    const box = $('connList');
+    if (!data.recent?.length) {
+      box.innerHTML = '<p class="note">当前没有活动连接。</p>';
+      return;
+    }
+    box.innerHTML = data.recent.map((c) => `
+      <div class="item">
+        <div class="grow">
+          <div class="title">${escapeHtml(c.host || '(无域名)')}</div>
+          <div class="sub">${escapeHtml(c.rule || '')} · ${escapeHtml(c.chain.join(' → '))}</div>
+        </div>
+        <span class="tag muted">${escapeHtml(c.network)}</span>
+      </div>
+    `).join('');
+  } catch (err) {
+    $('connList').innerHTML = `<p class="err-text">${escapeHtml(err.message)}</p>`;
+  }
+}
+
 /* --------------------------------------------------------------- 加载 */
 
 async function loadAll() {
@@ -124,7 +270,15 @@ async function loadOverview() {
     if (data.dnsmasq?.takenOver) notes.push(`dnsmasq 已接管（${data.dnsmasq.confDir}）`);
     if (data.meta?.lastDeployAt) notes.push(`上次部署 ${new Date(data.meta.lastDeployAt).toLocaleString()}`);
     $('overviewNote').textContent = notes.join(' · ');
-    $('overviewError').textContent = data.meta?.lastDeployError ? `上次错误：${data.meta.lastDeployError}` : '';
+
+    // 给出下一步该干什么，别让用户对着空白页猜
+    const hints = [];
+    if (!data.counts.nodes) hints.push('还没有节点：去「订阅」页添加订阅并刷新');
+    else if (!data.kernel.running) hints.push(`有 ${data.counts.nodes} 个节点但内核没在运行：去「设置」点「保存并部署」`);
+    if (data.kernel.running && data.counts.nodes) hints.push('想换线路去「节点」页，点分组里的成员即可切换');
+    $('overviewError').textContent = hints.length
+      ? hints.join('　·　')
+      : (data.meta?.lastDeployError ? `上次错误：${data.meta.lastDeployError}` : '');
     await loadKernelLog();
   } catch (err) {
     if (err.status === 401) return checkAuth();
@@ -259,7 +413,9 @@ function renderSettings() {
   $('setDnsDirect').value = s.dns.direct === 'wan' ? '' : (s.dns.directAddress || '');
   $('setDnsProxy').value = s.dns.proxy || '';
   $('setFakeIp').checked = Boolean(s.dns.fakeIp);
-  $('setKernelVersion').value = s.kernel.version || '（未安装）';
+  $('setKernelVersion').value = s.kernel.installed
+    ? (s.kernel.version ? `已安装 ${s.kernel.version}` : '已安装（版本未知）')
+    : '（未安装）';
   $('setLogLevel').value = s.kernel.logLevel || 'warn';
 }
 
@@ -303,6 +459,11 @@ function bindEvents() {
       }
       document.querySelectorAll('nav.tabs button').forEach((b) => b.classList.toggle('active', b === btn));
       document.querySelectorAll('section.page').forEach((p) => p.classList.toggle('active', p.id === `page-${tab}`));
+      // 节点页的数据依赖内核在跑，进页面时现拉
+      if (tab === 'nodes') {
+        await loadNodes();
+        await loadConnections();
+      }
     });
   });
 
@@ -318,6 +479,31 @@ function bindEvents() {
     await loadOverview();
   }));
   $('btnLog').addEventListener('click', loadKernelLog);
+
+  // ---- 节点页
+  $('btnReloadNodes').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
+    await loadNodes();
+    toast('已刷新');
+  }));
+  $('btnTestAll').addEventListener('click', (e) => withBusy(e.currentTarget, testAll));
+  $('btnReloadConns').addEventListener('click', (e) => withBusy(e.currentTarget, loadConnections));
+
+  $('nodeGroups').addEventListener('click', async (e) => {
+    const lat = e.target.dataset.latency;
+    if (lat) {
+      e.stopPropagation();
+      await testLatency(lat);
+      return;
+    }
+    const group = e.target.closest('[data-select-group]')?.dataset.selectGroup;
+    const name = e.target.closest('[data-select-name]')?.dataset.selectName;
+    if (group && name) await switchNode(group, name);
+  });
+
+  $('nodeList').addEventListener('click', async (e) => {
+    const lat = e.target.dataset.latency;
+    if (lat) await testLatency(lat);
+  });
 
   $('btnAddSub').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
     const url = $('subUrl').value.trim();
@@ -412,10 +598,21 @@ function bindEvents() {
 
   $('btnInstallKernel').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
     const latest = await api('/kernel/latest');
-    if (!confirm(`下载并安装官方 sing-box ${latest.version}？`)) return;
-    await api('/kernel/install', { method: 'POST', body: { version: latest.version } });
-    toast(`已安装 ${latest.version}`);
-    await loadOverview();
+    const current = state.settings?.kernel?.version;
+    const msg = current && current === latest.version
+      ? `当前已经是 ${latest.version}，仍要重新下载安装吗？`
+      : `下载并安装官方 sing-box ${latest.version}？（约 30 MB，装完会自动重启内核）`;
+    if (!confirm(msg)) return;
+    $('kernelUpdateNote').textContent = '正在下载…这一步可能要一两分钟';
+    try {
+      const info = await api('/kernel/install', { method: 'POST', body: { version: latest.version } });
+      $('kernelUpdateNote').textContent = `已安装 ${info.version}${info.restarted ? '，内核已重启' : ''}`;
+      toast(`内核已更新到 ${info.version}`);
+      await Promise.all([loadSettings(), loadOverview()]);
+    } catch (err) {
+      $('kernelUpdateNote').textContent = `安装失败：${err.message}`;
+      toast('内核安装失败');
+    }
   }));
 
   // 分组表单

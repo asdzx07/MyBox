@@ -30,6 +30,7 @@
     <div class="brand">MyBox<small id="brandVersion"></small></div>
     <nav class="tabs">
       <button data-tab="overview" class="active">概览</button>
+      <button data-tab="nodes">节点</button>
       <button data-tab="subscriptions">订阅</button>
       <button data-tab="groups">分组</button>
       <button data-tab="policies">策略</button>
@@ -66,6 +67,38 @@
           <button class="small" id="btnLog">刷新</button>
         </div>
         <pre class="log" id="kernelLog">—</pre>
+      </div>
+    </section>
+
+    <!-- ---------------------------------------------------------- 节点 -->
+    <section class="page" id="page-nodes">
+      <h2>节点</h2>
+
+      <div class="card">
+        <div class="card-head">
+          <h3>节点组</h3>
+          <div class="spacer"></div>
+          <button class="small" id="btnReloadNodes">刷新</button>
+          <button class="small" id="btnTestAll">全部测速</button>
+        </div>
+        <p class="note" style="margin:-4px 0 12px">
+          点成员即可切换，切换走内核的 Clash API，<strong>不重启内核、不断流</strong>。
+        </p>
+        <div id="nodeGroups"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>全部节点</h3><div class="spacer"></div>
+          <span class="note" id="nodeCount"></span>
+        </div>
+        <div class="list" id="nodeList"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>最近连接</h3><div class="spacer"></div>
+          <button class="small" id="btnReloadConns">刷新</button>
+        </div>
+        <div class="list" id="connList"></div>
       </div>
     </section>
 
