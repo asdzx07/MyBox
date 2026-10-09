@@ -162,6 +162,22 @@ app.post('/api/subscriptions', async (req, res) => {
   }
 });
 
+/** 启用 / 停用一条订阅。停用后它的节点不进配置，要重新部署才生效。 */
+app.put('/api/subscriptions/:id', (req, res) => {
+  const enabled = req.body?.enabled !== false;
+  let found = false;
+  mutateSettings((s) => {
+    const sub = s.subscriptions.find((x) => x.id === req.params.id);
+    if (sub) {
+      sub.enabled = enabled;
+      found = true;
+    }
+  });
+  if (!found) return res.status(404).json({ error: '订阅不存在' });
+  log.info('订阅 %s 已%s', req.params.id, enabled ? '启用' : '停用');
+  res.json({ ok: true, id: req.params.id, enabled });
+});
+
 app.delete('/api/subscriptions/:id', (req, res) => {
   mutateSettings((s) => {
     s.subscriptions = s.subscriptions.filter((x) => x.id !== req.params.id);
@@ -204,9 +220,18 @@ async function refreshSubscription(id) {
 }
 
 app.get('/api/nodes', (req, res) => {
-  const { nodes } = loadSettings({ force: true });
+  const { nodes, subscriptions } = loadSettings({ force: true });
+  const subById = new Map(subscriptions.map((s) => [s.id, s]));
   res.json({
-    nodes: nodes.map(({ __subscriptionId, ...rest }) => ({ ...rest, subscriptionId: __subscriptionId })),
+    nodes: nodes.map(({ __subscriptionId, ...rest }) => {
+      const sub = subById.get(__subscriptionId);
+      return {
+        ...rest,
+        subscriptionId: __subscriptionId,
+        subscriptionName: sub?.name ?? null,
+        subscriptionEnabled: sub ? sub.enabled !== false : true,
+      };
+    }),
   });
 });
 

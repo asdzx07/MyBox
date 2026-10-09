@@ -107,11 +107,12 @@
         <div class="card-head">
           <h3>节点组</h3>
           <div class="spacer"></div>
+          <button class="small" id="btnCollapseAll">全部折叠</button>
           <button class="small" id="btnReloadNodes">刷新</button>
           <button class="small" id="btnTestAll">全部测速</button>
         </div>
         <p class="note" style="margin:-4px 0 12px">
-          点成员即可切换，切换走内核的 Clash API，<strong>不重启内核、不断流</strong>。
+          点成员即可切换，切换走内核的 Clash API，<strong>不重启内核、不断流</strong>。点组标题可折叠。
         </p>
         <div id="nodeGroups"></div>
       </div>
@@ -121,13 +122,6 @@
           <span class="note" id="nodeCount"></span>
         </div>
         <div class="list" id="nodeList"></div>
-      </div>
-
-      <div class="card">
-        <div class="card-head"><h3>最近连接</h3><div class="spacer"></div>
-          <button class="small" id="btnReloadConns">刷新</button>
-        </div>
-        <div class="list" id="connList"></div>
       </div>
     </section>
 
@@ -149,6 +143,7 @@
         <div class="card-head"><h3>已有订阅</h3><div class="spacer"></div>
           <button class="small" id="btnRefreshSubs">全部刷新</button>
         </div>
+        <p class="note" id="subSwitchNote" style="margin:-4px 0 12px"></p>
         <div class="list" id="subList"></div>
       </div>
     </section>

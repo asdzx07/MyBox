@@ -249,6 +249,18 @@ label.field > span { display: block; font-size: 12px; color: var(--text-2); marg
 
 .mini-empty { color: var(--text-2); font-size: 12px; padding: 8px 2px; }
 
+/* 可折叠分组标题上的小箭头 */
+.chevron {
+  display: inline-block;
+  width: 12px;
+  color: var(--text-2);
+  font-size: 11px;
+  flex: 0 0 auto;
+  user-select: none;
+}
+
+.group-head:hover h3 { color: var(--accent); }
+
 .toast {
   position: fixed;
   left: 50%;

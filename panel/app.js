@@ -108,6 +108,7 @@ function showApp() {
 state.nodeGroups = [];
 state.nodeList = [];
 state.latency = {};
+state.collapsed = {};
 
 const GROUP_LABEL = { Selector: '手动选择', URLTest: '自动择优', Fallback: '故障转移', LoadBalance: '负载均衡' };
 
@@ -139,16 +140,22 @@ function renderNodeGroups() {
     box.innerHTML = '<p class="note">内核没有返回任何分组。可能内核没在运行，或还没有部署配置。</p>';
     return;
   }
-  box.innerHTML = state.nodeGroups.map((g) => `
+  // 默认全部折叠：分组一多，全展开要滚很久才能看到下面的东西
+  const collapsed = (name) => state.collapsed[name] !== false;
+
+  box.innerHTML = state.nodeGroups.map((g) => {
+    const isCollapsed = collapsed(g.name);
+    return `
     <div class="card" style="background:var(--surface-2);margin-bottom:10px">
-      <div class="card-head">
+      <div class="card-head group-head" data-collapse="${escapeHtml(g.name)}" style="cursor:pointer;margin-bottom:${isCollapsed ? '0' : '12px'}">
+        <span class="chevron">${isCollapsed ? '▸' : '▾'}</span>
         <h3>${escapeHtml(g.name)}</h3>
         <span class="tag">${GROUP_LABEL[g.type] || g.type}</span>
         <span class="tag muted">${g.members.length} 个成员</span>
         <div class="spacer"></div>
         <span class="note">当前：<strong>${escapeHtml(g.now || '—')}</strong></span>
       </div>
-      <div class="list">
+      <div class="list${isCollapsed ? ' hidden' : ''}">
         ${g.members.map((m) => `
           <div class="item" data-select-group="${escapeHtml(g.name)}" data-select-name="${escapeHtml(m)}"
                style="cursor:pointer;${m === g.now ? 'outline:1px solid var(--accent)' : ''}">
@@ -160,8 +167,8 @@ function renderNodeGroups() {
           </div>
         `).join('')}
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 function renderNodeList() {
@@ -224,28 +231,6 @@ async function switchNode(group, name) {
   } catch (err) {
     toast(err.message);
     await loadNodes();
-  }
-}
-
-async function loadConnections() {
-  try {
-    const data = await api('/nodes/connections');
-    const box = $('connList');
-    if (!data.recent?.length) {
-      box.innerHTML = '<p class="note">当前没有活动连接。</p>';
-      return;
-    }
-    box.innerHTML = data.recent.map((c) => `
-      <div class="item">
-        <div class="grow">
-          <div class="title">${escapeHtml(c.host || '(无域名)')}</div>
-          <div class="sub">${escapeHtml(c.rule || '')} · ${escapeHtml([...c.chain].reverse().join(' → '))}</div>
-        </div>
-        <span class="tag muted">${escapeHtml(c.network)}</span>
-      </div>
-    `).join('');
-  } catch (err) {
-    $('connList').innerHTML = `<p class="err-text">${escapeHtml(err.message)}</p>`;
   }
 }
 
@@ -372,16 +357,30 @@ async function loadSubscriptions() {
     list.innerHTML = '<p class="note">还没有订阅。</p>';
     return;
   }
-  list.innerHTML = subscriptions.map((s) => `
+  list.innerHTML = subscriptions.map((s) => {
+    const on = s.enabled !== false;
+    return `
     <div class="item">
+      <label class="switch" title="${on ? '点击停用' : '点击启用'}">
+        <input type="checkbox" data-sub-toggle="${escapeHtml(s.id)}"${on ? ' checked' : ''}><span></span>
+      </label>
       <div class="grow">
-        <div class="title">${escapeHtml(s.name)} <span class="tag muted">${s.nodeCount || 0} 节点</span></div>
+        <div class="title">
+          ${escapeHtml(s.name)}
+          <span class="tag muted">${s.nodeCount || 0} 节点</span>
+          ${on ? '' : '<span class="tag err">已停用</span>'}
+        </div>
         <div class="sub">${escapeHtml(s.url)}</div>
       </div>
-      <button class="small" data-refresh="${s.id}">刷新</button>
-      <button class="small danger" data-remove="${s.id}">删除</button>
-    </div>
-  `).join('');
+      <button class="small" data-refresh="${escapeHtml(s.id)}">刷新</button>
+      <button class="small danger" data-remove="${escapeHtml(s.id)}">删除</button>
+    </div>`;
+  }).join('');
+
+  const off = subscriptions.filter((s) => s.enabled === false).length;
+  $('subSwitchNote').textContent = off
+    ? `有 ${off} 条订阅已停用，它的节点不会进配置（改完记得「保存并部署」）。`
+    : '开关控制这条订阅的节点是否进配置。停用后要「保存并部署」才生效。';
 }
 
 async function loadGroups() {
@@ -529,11 +528,8 @@ function bindEvents() {
       }
       document.querySelectorAll('nav.tabs button').forEach((b) => b.classList.toggle('active', b === btn));
       document.querySelectorAll('section.page').forEach((p) => p.classList.toggle('active', p.id === `page-${tab}`));
-      // 节点页和日志页的数据依赖内核在跑，进页面时现拉
-      if (tab === 'nodes') {
-        await loadNodes();
-        await loadConnections();
-      }
+      // 节点页的数据依赖内核在跑，进页面时现拉
+      if (tab === 'nodes') await loadNodes();
       if (tab === 'logs') await loadKernelLog();
       scheduleLogAuto();
     });
@@ -570,7 +566,6 @@ function bindEvents() {
     toast('已刷新');
   }));
   $('btnTestAll').addEventListener('click', (e) => withBusy(e.currentTarget, testAll));
-  $('btnReloadConns').addEventListener('click', (e) => withBusy(e.currentTarget, loadConnections));
 
   $('nodeGroups').addEventListener('click', async (e) => {
     const lat = e.target.dataset.latency;
@@ -579,9 +574,24 @@ function bindEvents() {
       await testLatency(lat);
       return;
     }
+    // 点组标题折叠/展开
+    const collapseName = e.target.closest('[data-collapse]')?.dataset.collapse;
+    if (collapseName !== undefined) {
+      const nowCollapsed = state.collapsed[collapseName] !== false;
+      state.collapsed[collapseName] = !nowCollapsed;
+      renderNodeGroups();
+      return;
+    }
     const group = e.target.closest('[data-select-group]')?.dataset.selectGroup;
     const name = e.target.closest('[data-select-name]')?.dataset.selectName;
     if (group && name) await switchNode(group, name);
+  });
+
+  $('btnCollapseAll').addEventListener('click', () => {
+    const anyExpanded = state.nodeGroups.some((g) => state.collapsed[g.name] === false);
+    for (const g of state.nodeGroups) state.collapsed[g.name] = anyExpanded;
+    renderNodeGroups();
+    toast(anyExpanded ? '已全部折叠' : '已全部展开');
   });
 
   $('nodeList').addEventListener('click', async (e) => {
@@ -613,6 +623,21 @@ function bindEvents() {
     toast(`共 ${total} 个节点`);
     await Promise.all([loadSubscriptions(), loadOverview()]);
   }));
+
+  // 订阅启用/停用
+  $('subList').addEventListener('change', async (e) => {
+    const id = e.target.dataset.subToggle;
+    if (!id) return;
+    const enabled = e.target.checked;
+    try {
+      await api(`/subscriptions/${encodeURIComponent(id)}`, { method: 'PUT', body: { enabled } });
+      toast(enabled ? '已启用，记得「保存并部署」' : '已停用，记得「保存并部署」');
+      await loadSubscriptions();
+    } catch (err) {
+      e.target.checked = !enabled;
+      toast(err.message);
+    }
+  });
 
   $('subList').addEventListener('click', async (e) => {
     const refreshId = e.target.dataset.refresh;
