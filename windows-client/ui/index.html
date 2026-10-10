@@ -26,6 +26,10 @@
         <svg class="nav-icon" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
         <span>组</span>
       </div>
+      <div class="nav-item" data-tab="subs">
+        <svg class="nav-icon" viewBox="0 0 24 24"><path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1"/></svg>
+        <span>订阅</span>
+      </div>
       <div class="nav-item" data-tab="routing">
         <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
         <span>分流</span>
@@ -141,15 +145,51 @@
       <!-- 2. 组 / 节点管理 -->
       <section class="view-section" id="sec-groups">
         <div class="panel-box">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
             <div>
               <h3>出口节点组</h3>
-              <p class="sub-tip">点击节点卡片即可无缝切换出口，通过内核 Clash API 切换，不断流、不重启。</p>
+              <p class="sub-tip">点击节点卡片无缝切换出口，支持批量测速与直接推送订阅到 Web 端。</p>
             </div>
-            <button class="small-btn" id="btnReloadGroups">刷新节点</button>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button class="small-btn primary" id="btnTestLatencyAll" title="一键测试当前所有节点的真实握手延迟">⚡ 延迟测试</button>
+              <button class="small-btn" id="btnOpenSubModal" title="直接添加订阅并推送到旁路由 Web 端">＋ 添加订阅</button>
+              <button class="small-btn" id="btnReloadGroups">刷新节点</button>
+            </div>
           </div>
           <div id="groupCardsContainer" class="group-cards-stack">
             <p class="empty-tip">正在加载旁路由节点列表...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 订阅管理 (直推 Web 端) -->
+      <section class="view-section" id="sec-subs">
+        <div class="panel-box">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+            <div>
+              <h3>订阅管理 (推送至 Web 端)</h3>
+              <p class="sub-tip">在 Windows 客户端添加订阅，将直接推送至旁路由并自动热部署生效。</p>
+            </div>
+            <div style="display:flex;gap:8px">
+              <button class="small-btn primary" id="btnOpenAddSubViewModal">＋ 添加新订阅</button>
+              <button class="small-btn" id="btnRefreshAllSubs">全部刷新</button>
+            </div>
+          </div>
+
+          <!-- 快捷添加表单 -->
+          <div class="sub-card-box" style="margin-bottom:16px;padding:16px;border:1px solid var(--border);border-radius:12px;background:#fff">
+            <div style="font-weight:600;font-size:13px;margin-bottom:10px">快速添加订阅</div>
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <input type="text" id="inlineSubName" class="text-input" placeholder="订阅名称 (例如: 我的主力机场，可选)">
+              <div style="display:flex;gap:8px">
+                <input type="text" id="inlineSubUrl" class="text-input" style="flex:1" placeholder="订阅链接 (URL 例如: https://...)">
+                <button class="small-btn primary" id="btnInlineAddSub" style="white-space:nowrap;padding:0 18px">推送到 Web 端</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="subsListContainer" class="sub-list-stack">
+            <p class="empty-tip">正在加载订阅列表...</p>
           </div>
         </div>
       </section>
@@ -238,6 +278,31 @@
       </section>
     </div>
   </main>
+
+  <!-- 添加订阅弹窗 -->
+  <div id="subModal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 style="margin:0;font-size:15px;font-weight:600">添加订阅 (直接推送至 Web 端)</h3>
+        <span class="modal-close" id="btnCloseSubModal">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>订阅名称 (可选)</label>
+          <input type="text" id="modalSubName" placeholder="例如：主力机场 / 优质专线" class="text-input">
+        </div>
+        <div class="form-group">
+          <label>订阅地址 (URL 必填)</label>
+          <input type="text" id="modalSubUrl" placeholder="https://..." class="text-input">
+          <span class="field-hint">支持 Base64、Clash、sing-box 订阅链接，添加后将直接推送到旁路由 Web 端并自动生效</span>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="small-btn" id="btnCancelSubModal">取消</button>
+        <button class="small-btn primary" id="btnConfirmAddSub">立即推送到 Web 端并部署</button>
+      </div>
+    </div>
+  </div>
 
   <!-- 提示浮层 -->
   <div id="toast" class="toast hidden"></div>

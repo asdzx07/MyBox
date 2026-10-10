@@ -8,6 +8,7 @@ let localState = {
   authed: true,
   latency: null,
   activeInterface: {},
+  nodeLatency: {},
 };
 
 let remoteData = {
@@ -346,12 +347,35 @@ async function loadGroups() {
           <span style="font-size:11px;background:#f3f4f6;padding:3px 8px;border-radius:6px">${g.type}</span>
         </div>
         <div class="node-pill-grid">
-          ${(g.members || []).map(m => `
-            <div class="node-pill ${m === g.now ? 'active' : ''}" onclick="selectNode('${escapeHtml(g.name)}', '${escapeHtml(m)}')">
-              <span>${escapeHtml(m)}</span>
-              ${m === g.now ? '<span style="font-size:10px">✓</span>' : ''}
-            </div>
-          `).join('')}
+          ${(g.members || []).map(m => {
+            const lat = localState.nodeLatency?.[m];
+            let latClass = '';
+            let latText = '—';
+            if (lat) {
+              if (lat.testing) {
+                latText = '...';
+                latClass = 'testing';
+              } else if (lat.delay !== null && lat.delay !== undefined) {
+                const ms = lat.delay;
+                latText = `${ms} ms`;
+                if (ms < 120) latClass = 'fast';
+                else if (ms < 280) latClass = 'medium';
+                else latClass = 'slow';
+              } else {
+                latText = '超时';
+                latClass = 'error';
+              }
+            }
+            return `
+              <div class="node-pill ${m === g.now ? 'active' : ''}" onclick="selectNode('${escapeHtml(g.name)}', '${escapeHtml(m)}')">
+                <span class="node-name-text" title="${escapeHtml(m)}">${escapeHtml(m)}</span>
+                <div class="node-pill-right">
+                  <span class="latency-badge ${latClass}" title="点击单独测试此节点延迟" onclick="event.stopPropagation(); testSingleLatency('${escapeHtml(m)}')">${latText}</span>
+                  ${m === g.now ? '<span style="font-size:11px;font-weight:bold">✓</span>' : ''}
+                </div>
+              </div>
+            `;
+          }).join('')}
         </div>
       </div>
     `).join('');
@@ -385,6 +409,198 @@ window.selectNode = async function(group, name) {
     toast(`切换失败: ${err.message}`);
   }
 };
+
+window.testSingleLatency = async function(name) {
+  if (!localState.nodeLatency) localState.nodeLatency = {};
+  localState.nodeLatency[name] = { testing: true };
+  loadGroups();
+  try {
+    const res = await fetchRemote(`/nodes/latency?name=${encodeURIComponent(name)}`);
+    localState.nodeLatency[name] = { delay: res.delay, error: res.error };
+  } catch (err) {
+    localState.nodeLatency[name] = { delay: null, error: err.message };
+  }
+  loadGroups();
+};
+
+async function testAllLatency() {
+  const btn = $('btnTestLatencyAll');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '⚡ 测速中...';
+  }
+  toast('正在测试节点延迟...');
+  try {
+    const allMembers = new Set();
+    (remoteData.groups || []).forEach(g => (g.members || []).forEach(m => allMembers.add(m)));
+    const names = Array.from(allMembers);
+    if (!names.length) {
+      toast('当前没有可用节点可测速');
+      return;
+    }
+    if (!localState.nodeLatency) localState.nodeLatency = {};
+    names.forEach(n => { localState.nodeLatency[n] = { testing: true }; });
+    loadGroups();
+
+    const data = await fetchRemote('/nodes/latency/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ names }),
+    });
+    if (data.results) {
+      Object.assign(localState.nodeLatency, data.results);
+    }
+    toast(`测速完成！共测试 ${names.length} 个节点`);
+  } catch (err) {
+    toast(`批量测速失败: ${err.message}`);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '⚡ 延迟测试';
+    }
+    loadGroups();
+  }
+}
+
+/* ------------------------------------------------------------- 订阅管理 (直推 Web 端) */
+
+function openSubModal() {
+  const modal = $('subModal');
+  if (modal) {
+    $('modalSubName').value = '';
+    $('modalSubUrl').value = '';
+    modal.classList.remove('hidden');
+    setTimeout(() => $('modalSubUrl')?.focus(), 60);
+  }
+}
+
+function closeSubModal() {
+  $('subModal')?.classList.add('hidden');
+}
+
+async function addSubscription(name, url) {
+  name = (name || '').trim();
+  url = (url || '').trim();
+  if (!url) {
+    toast('请输入订阅 URL 链接');
+    return false;
+  }
+  if (!/^https?:\/\//i.test(url)) {
+    toast('订阅链接必须以 http:// 或 https:// 开头');
+    return false;
+  }
+
+  toast('正在推送订阅至 Web 端并解析节点...');
+  try {
+    const res = await fetchRemote('/subscriptions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, url }),
+    });
+    const count = res.nodeCount ?? 0;
+    toast(`🎉 订阅添加成功！已解析 ${count} 个节点并自动部署生效`);
+    closeSubModal();
+    if ($('inlineSubName')) $('inlineSubName').value = '';
+    if ($('inlineSubUrl')) $('inlineSubUrl').value = '';
+    await loadSubs();
+    await loadGroups();
+    return true;
+  } catch (err) {
+    toast(`推送订阅失败: ${err.message}`);
+    return false;
+  }
+}
+
+async function loadSubs() {
+  const container = $('subsListContainer');
+  if (!container) return;
+  try {
+    const data = await fetchRemote('/subscriptions');
+    const subs = data.subscriptions || [];
+    if (!subs.length) {
+      container.innerHTML = '<p class="empty-tip">暂无订阅。请在上方输入链接添加订阅，将直接推送至旁路由 Web 端并生效。</p>';
+      return;
+    }
+    container.innerHTML = subs.map(s => {
+      const timeStr = s.updatedAt ? new Date(s.updatedAt).toLocaleString() : '未刷新';
+      return `
+        <div class="sub-item-card">
+          <div class="sub-item-info">
+            <div class="sub-item-title">
+              <span>${escapeHtml(s.name || '未命名订阅')}</span>
+              <span class="auth-pill-badge authed" style="font-size:11px">${s.nodeCount || 0} 个节点</span>
+              <span class="auth-pill-badge guest" style="font-size:11px">${escapeHtml(s.format || 'sub')}</span>
+            </div>
+            <div class="sub-item-meta" style="margin-top:2px">链接: <span style="font-family:monospace;word-break:break-all">${escapeHtml(s.url)}</span></div>
+            <div class="sub-item-meta" style="color:#a1a1aa;margin-top:2px">更新时间: ${timeStr}</div>
+          </div>
+          <div class="sub-item-actions">
+            <button class="small-btn" onclick="refreshSingleSub('${escapeHtml(s.id)}')">刷新</button>
+            <button class="small-btn danger" onclick="deleteSingleSub('${escapeHtml(s.id)}')">删除</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch (err) {
+    if (err.message === 'unauthorized') {
+      container.innerHTML = `
+        <div class="unauth-tip-card">
+          <div class="unauth-icon">🔒</div>
+          <div class="unauth-title">旁路由已开启密码访问保护</div>
+          <div class="unauth-desc">请在首页【仪表】中输入旁路由管理密码并点击“连接/保存”，即可自动管理订阅。</div>
+          <button class="small-btn primary" onclick="focusPasswordInput()" style="padding:6px 18px">前往输入密码</button>
+        </div>
+      `;
+    } else {
+      container.innerHTML = `<p class="empty-tip" style="color:var(--danger)">加载订阅失败: ${err.message}</p>`;
+    }
+  }
+}
+
+window.refreshSingleSub = async function(id) {
+  toast('正在向 Web 端请求刷新订阅...');
+  try {
+    const res = await fetchRemote(`/subscriptions/${encodeURIComponent(id)}/refresh`, { method: 'POST' });
+    toast(`已更新！节点数量: ${res.nodeCount || 0}`);
+    await loadSubs();
+    await loadGroups();
+  } catch (err) {
+    toast(`刷新失败: ${err.message}`);
+  }
+};
+
+window.deleteSingleSub = async function(id) {
+  if (!confirm('确定从 Web 端删除此订阅吗？删除后该订阅的节点将被同步移除。')) return;
+  toast('正在删除订阅...');
+  try {
+    await fetchRemote(`/subscriptions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    toast('已删除订阅');
+    await loadSubs();
+    await loadGroups();
+  } catch (err) {
+    toast(`删除失败: ${err.message}`);
+  }
+};
+
+async function refreshAllSubs() {
+  toast('正在刷新所有订阅...');
+  try {
+    const data = await fetchRemote('/subscriptions');
+    const subs = data.subscriptions || [];
+    let count = 0;
+    for (const s of subs) {
+      try {
+        const r = await fetchRemote(`/subscriptions/${encodeURIComponent(s.id)}/refresh`, { method: 'POST' });
+        count += r.nodeCount || 0;
+      } catch {}
+    }
+    toast(`所有订阅已刷新完成，共 ${count} 个节点`);
+    await loadSubs();
+    await loadGroups();
+  } catch (err) {
+    toast(`批量刷新失败: ${err.message}`);
+  }
+}
 
 /* ------------------------------------------------------------- 概览与内核状态 */
 
@@ -673,10 +889,11 @@ function switchTab(name) {
   const sec = $(`sec-${name}`);
   if (sec) sec.classList.add('active');
 
-  const titleMap = { overview: '仪表', groups: '组', routing: '分流', conns: '连接', settings: '设置' };
+  const titleMap = { overview: '仪表', groups: '组', subs: '订阅', routing: '分流', conns: '连接', settings: '设置' };
   $('pageTitle').textContent = titleMap[name] || '仪表';
 
   if (name === 'groups') loadGroups();
+  if (name === 'subs') loadSubs();
   if (name === 'routing') loadPolicies();
   if (name === 'conns') loadConnections();
 }
@@ -712,7 +929,28 @@ function bindEvents() {
     pollTraffic();
   });
 
+  // 节点组与延迟测速
   $('btnReloadGroups')?.addEventListener('click', loadGroups);
+  $('btnTestLatencyAll')?.addEventListener('click', testAllLatency);
+
+  // 订阅弹窗与添加
+  $('btnOpenSubModal')?.addEventListener('click', openSubModal);
+  $('btnOpenAddSubViewModal')?.addEventListener('click', openSubModal);
+  $('btnCloseSubModal')?.addEventListener('click', closeSubModal);
+  $('btnCancelSubModal')?.addEventListener('click', closeSubModal);
+  $('btnConfirmAddSub')?.addEventListener('click', () => {
+    const name = $('modalSubName')?.value;
+    const url = $('modalSubUrl')?.value;
+    addSubscription(name, url);
+  });
+  $('btnInlineAddSub')?.addEventListener('click', () => {
+    const name = $('inlineSubName')?.value;
+    const url = $('inlineSubUrl')?.value;
+    addSubscription(name, url);
+  });
+  $('btnRefreshAllSubs')?.addEventListener('click', refreshAllSubs);
+
+  // 策略与连接
   $('btnSavePoliciesLocal')?.addEventListener('click', savePolicies);
   $('btnResetPoliciesLocal')?.addEventListener('click', resetPolicies);
 
