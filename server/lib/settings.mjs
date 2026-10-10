@@ -1,6 +1,9 @@
 import crypto from 'node:crypto';
 import { SETTINGS_PATH } from './paths.mjs';
-import { readJson, writeJsonAtomic } from './fsx.mjs';
+import { readJsonStrict, writeJsonAtomic } from './fsx.mjs';
+import { createLogger } from './log.mjs';
+
+const log = createLogger('settings');
 
 /** 内置分组：直连 / 拒绝 是固定出站，另外两个是用户可编辑的分组。 */
 export const BUILTIN_OUTBOUNDS = [
@@ -128,9 +131,27 @@ let cache = null;
 
 export function loadSettings({ force = false } = {}) {
   if (cache && !force) return cache;
-  const stored = readJson(SETTINGS_PATH, null);
+
+  let stored;
+  try {
+    stored = readJsonStrict(SETTINGS_PATH);
+  } catch (err) {
+    if (err.code !== 'ENOENT') {
+      cache = null;
+      log.error('读取设置文件失败，保留原文件：%s（%s）', SETTINGS_PATH, err.message);
+      throw new Error(`设置文件无法读取或 JSON 格式无效，原文件已保留：${SETTINGS_PATH}`, { cause: err });
+    }
+  }
+
+  if (stored !== undefined && (!stored || typeof stored !== 'object' || Array.isArray(stored))) {
+    cache = null;
+    const err = new Error('设置文件根节点必须是 JSON 对象');
+    log.error('设置文件格式无效，保留原文件：%s（%s）', SETTINGS_PATH, err.message);
+    throw new Error(`设置文件格式无效，原文件已保留：${SETTINGS_PATH}`, { cause: err });
+  }
+
   cache = mergeDefaults(stored, defaultSettings());
-  if (!stored) saveSettings(cache);
+  if (stored === undefined) saveSettings(cache);
   return cache;
 }
 

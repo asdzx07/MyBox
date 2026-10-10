@@ -16,7 +16,8 @@
   "scripts": {
     "start": "node server/index.mjs",
     "dev": "MYBOX_ROOT=./runtime node server/index.mjs",
-    "check": "node --check server/index.mjs"
+    "check": "node --check server/index.mjs",
+    "test": "node --test tools/regression-safety.test.mjs"
   },
   "dependencies": {
     "express": "^5.1.0",

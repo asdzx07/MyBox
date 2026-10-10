@@ -22,11 +22,12 @@ const log = createLogger('deploy');
 const RULESET_CHECK_FILE = path.join(DATA_DIR, 'ruleset-check.json');
 const RULESET_RECHECK_MS = 24 * 3600 * 1000;
 
-let deploying = false;
+let deployQueue = Promise.resolve();
+let pendingDeploys = 0;
 
-/** 正在部署中。看门狗靠它避让——部署期间内核本来就会短暂停止。 */
+/** 正在部署或排队。看门狗靠它避让——部署期间内核本来就会短暂停止。 */
 export function isDeploying() {
-  return deploying;
+  return pendingDeploys > 0;
 }
 
 /**
@@ -94,11 +95,14 @@ async function validateRuleSets(settings) {
  * 任何一步失败都尽量让系统回到「能上网」的状态，而不是半死不活。
  */
 export async function deploy({ restart = true, skipNetwork = false } = {}) {
-  deploying = true;
+  pendingDeploys += 1;
+  const current = deployQueue.then(() => deployInner({ restart, skipNetwork }));
+  // Keep the queue usable after a failed deployment while preserving the caller's rejection.
+  deployQueue = current.catch(() => {});
   try {
-    return await deployInner({ restart, skipNetwork });
+    return await current;
   } finally {
-    deploying = false;
+    pendingDeploys -= 1;
   }
 }
 
