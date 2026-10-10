@@ -766,25 +766,46 @@ async function resetPolicies() {
 
 /* ------------------------------------------------------------- 当前连接 */
 
+let connLoadPromise = null;
+let localConnViewGeneration = 0;
+
+function isConnectionsViewVisible() {
+  return !document.hidden && $('sec-conns')?.classList.contains('active');
+}
+
 async function loadConnections() {
+  if (connLoadPromise) return connLoadPromise;
+  if (!isConnectionsViewVisible()) return;
+
+  const generation = localConnViewGeneration;
   const container = $('connsListContainer');
-  try {
-    const data = await fetchRemote('/connections');
-    remoteData.connections = data.connections || [];
-    renderConnections();
-  } catch (err) {
-    if (err.message === 'unauthorized') {
-      container.innerHTML = `
-        <div class="unauth-tip-card">
-          <div class="unauth-icon">🔒</div>
-          <div class="unauth-title">旁路由已开启密码访问保护</div>
-          <div class="unauth-desc">请在首页【仪表】中输入旁路由管理密码并点击“连接/保存”，即可查看实时网络连接。</div>
-          <button class="small-btn primary" onclick="focusPasswordInput()" style="padding:6px 18px">前往输入密码</button>
-        </div>
-      `;
-    } else {
-      container.innerHTML = `<p class="empty-tip" style="color:var(--danger)">加载连接失败: ${err.message}</p>`;
+  const request = (async () => {
+    try {
+      const data = await fetchRemote('/connections');
+      if (generation !== localConnViewGeneration || !isConnectionsViewVisible()) return;
+      remoteData.connections = data.connections || [];
+      renderConnections();
+    } catch (err) {
+      if (generation !== localConnViewGeneration || !isConnectionsViewVisible()) return;
+      if (err.message === 'unauthorized') {
+        container.innerHTML = `
+          <div class="unauth-tip-card">
+            <div class="unauth-icon">🔒</div>
+            <div class="unauth-title">旁路由已开启密码访问保护</div>
+            <div class="unauth-desc">请在首页【仪表】中输入旁路由管理密码并点击“连接/保存”，即可查看实时网络连接。</div>
+            <button class="small-btn primary" onclick="focusPasswordInput()" style="padding:6px 18px">前往输入密码</button>
+          </div>
+        `;
+      } else {
+        container.innerHTML = `<p class="empty-tip" style="color:var(--danger)">加载连接失败: ${err.message}</p>`;
+      }
     }
+  })();
+  connLoadPromise = request;
+  try {
+    await request;
+  } finally {
+    if (connLoadPromise === request) connLoadPromise = null;
   }
 }
 
@@ -930,6 +951,7 @@ function startLocalConnPoll() {
 }
 
 function stopLocalConnPoll() {
+  localConnViewGeneration += 1;
   if (localConnPollTimer) {
     clearInterval(localConnPollTimer);
     localConnPollTimer = null;
