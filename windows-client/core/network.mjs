@@ -1,6 +1,9 @@
 import os from 'node:os';
-import { exec, execSync } from 'node:child_process';
+import { exec, execFile, execSync } from 'node:child_process';
+import { promisify } from 'node:util';
 
+const execFileAsync = promisify(execFile);
+const GATEWAY_STATUS_TTL_MS = 1000;
 let cachedLatency = 1;
 let lastPingTime = 0;
 
@@ -36,22 +39,83 @@ export function getActiveInterface() {
   }
 }
 
+function queryDefaultRouteTable() {
+  return execFileAsync('route', ['print', '0.0.0.0'], { encoding: 'utf8', timeout: 1500 })
+    .then(({ stdout }) => stdout);
+}
+
+/** 从 Windows 路由表文本中精确判断默认网关，避免误判本机 IP。 */
+export function parseGatewayRouteTable(output, gatewayIp = '192.168.3.2') {
+  for (const line of String(output || '').split('\n')) {
+    const parts = line.trim().split(/\s+/);
+    if (parts.length >= 5 && parts[0] === '0.0.0.0' && parts[1] === '0.0.0.0' && parts[2] === gatewayIp) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * 创建可测的异步网关状态缓存。缓存过期时异步执行一次路由查询；并发调用共享同一查询。
+ */
+export function createGatewayStatusCache({ query = queryDefaultRouteTable, ttlMs = GATEWAY_STATUS_TTL_MS, now = Date.now } = {}) {
+  const states = new Map();
+  const pending = new Map();
+  const revisions = new Map();
+
+  async function refresh(gatewayIp) {
+    const key = String(gatewayIp || '');
+    if (pending.has(key)) return pending.get(key);
+
+    const revision = revisions.get(key) || 0;
+    const request = (async () => {
+      let connected = false;
+      try {
+        connected = parseGatewayRouteTable(await query(key), key);
+      } catch {}
+      if ((revisions.get(key) || 0) === revision) {
+        states.set(key, { connected, checkedAt: now() });
+      }
+      return states.get(key)?.connected ?? connected;
+    })();
+    pending.set(key, request);
+    try {
+      return await request;
+    } finally {
+      if (pending.get(key) === request) pending.delete(key);
+    }
+  }
+
+  async function get(gatewayIp) {
+    const key = String(gatewayIp || '');
+    const state = states.get(key);
+    if (state && now() - state.checkedAt < ttlMs) return state.connected;
+    return refresh(key);
+  }
+
+  function set(gatewayIp, connected) {
+    const key = String(gatewayIp || '');
+    revisions.set(key, (revisions.get(key) || 0) + 1);
+    states.set(key, { connected: Boolean(connected), checkedAt: now() });
+  }
+
+  return { get, refresh, set };
+}
+
+const gatewayStatusCache = createGatewayStatusCache();
+
+/** 异步缓存读取供本地状态 API 使用；同步检查仍保留给启动自动连接兼容路径。 */
+export function getGatewayStatus(gatewayIp = '192.168.3.2') {
+  return gatewayStatusCache.get(gatewayIp);
+}
+
 /**
  * 毫秒级精确检查当前是否已通过旁路由作为默认网关 (精确匹配路由表网关列，杜绝误判本机 IP)
  */
 export function isConnectedToGateway(gatewayIp = '192.168.3.2') {
   try {
     const out = execSync('route print 0.0.0.0', { encoding: 'utf8', timeout: 1500 });
-    for (const line of out.split('\n')) {
-      const parts = line.trim().split(/\s+/);
-      if (parts.length >= 5 && parts[0] === '0.0.0.0' && parts[1] === '0.0.0.0') {
-        const gw = parts[2];
-        if (gw === gatewayIp) {
-          return true;
-        }
-      }
-    }
-    return false;
+    return parseGatewayRouteTable(out, gatewayIp);
   } catch {
     return false;
   }
@@ -78,6 +142,7 @@ export function connectGateway(gatewayIp = '192.168.3.2') {
     throw new Error(`切换网关与 DNS 失败(请确保以管理员权限运行): ${err.message}`);
   }
 
+  gatewayStatusCache.set(gatewayIp, true);
   return { ok: true, connected: true, gateway: gatewayIp, interface: alias, ip };
 }
 
@@ -103,6 +168,7 @@ export function disconnectGateway(gatewayIp = '192.168.3.2') {
   try { execSync(`route delete 0.0.0.0 ${gatewayIp}`, { stdio: 'ignore', timeout: 1500 }); } catch {}
   try { execSync('ipconfig /flushdns', { stdio: 'ignore', timeout: 1500 }); } catch {}
 
+  gatewayStatusCache.set(gatewayIp, false);
   return { ok: true, connected: false, gateway: gatewayIp };
 }
 
