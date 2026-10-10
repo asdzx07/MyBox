@@ -43,9 +43,9 @@
   <main class="main-viewport">
     <header class="top-header">
       <div class="header-left">
-        <div class="status-capsule" id="topCapsule" title="点击一键切换旁路由接管状态">
-          <span id="capsuleTime">未连接 ▶</span>
-          <span class="capsule-sq"></span>
+        <div class="status-capsule" id="topCapsule" title="点击连接/断开旁路由">
+          <span id="capsuleText" class="capsule-text"></span>
+          <span id="capsuleIcon" class="capsule-icon">▶</span>
         </div>
         <div class="view-title" id="pageTitle">仪表</div>
       </div>
@@ -93,7 +93,13 @@
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
               <span>状态</span>
             </div>
-            <div class="info-row"><span class="k">旁路由目标</span><span class="v" id="infoGwIp" style="color:var(--accent)">192.168.3.2</span></div>
+            <div class="info-row" style="align-items:center">
+              <span class="k">旁路由目标</span>
+              <div style="display:flex;align-items:center;gap:6px">
+                <input type="text" id="quickGwIp" value="192.168.3.2" class="quick-ip-input" placeholder="例如 192.168.3.2">
+                <button class="mini-btn" id="btnQuickSaveIp" title="保存旁路由IP">保存</button>
+              </div>
+            </div>
             <div class="info-row"><span class="k">本机 IPv4 (DHCP)</span><span class="v" id="infoLocalIp">—</span></div>
             <div class="info-row"><span class="k">旁路由延迟</span><span class="v" id="infoPing">—</span></div>
             <div class="info-row"><span class="k">内核状态</span><span class="v" id="infoKernelState" style="color:var(--ok)">检测中...</span></div>
