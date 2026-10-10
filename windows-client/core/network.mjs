@@ -58,7 +58,7 @@ export function isConnectedToGateway(gatewayIp = '192.168.3.2') {
 }
 
 /**
- * 连接旁路由：自动读取当前 IP，将网卡默认网关直接指向旁路由，DNS 设为 旁路由 与 223.5.5.5
+ * 连接旁路由：自动读取当前 IP，将网卡默认网关直接指向旁路由，DNS 设为唯一旁路由 DNS
  */
 export function connectGateway(gatewayIp = '192.168.3.2') {
   const iface = getActiveInterface();
@@ -69,11 +69,8 @@ export function connectGateway(gatewayIp = '192.168.3.2') {
     // 1. 设置网卡静态网关为旁路由 (保留当前 IP 与子网掩码不变)
     execSync(`netsh interface ip set address name="${alias}" static ${ip} 255.255.255.0 ${gatewayIp} 1`, { stdio: 'pipe', timeout: 3000 });
 
-    // 2. 设置首选 DNS 为旁路由，备选 DNS 为公共 DNS 223.5.5.5
+    // 2. 设置唯一 DNS 为旁路由（绝对不能加国内备用 DNS，否则 Windows 并发查询会导致 DNS 污染）
     execSync(`netsh interface ip set dns name="${alias}" static ${gatewayIp}`, { stdio: 'pipe', timeout: 3000 });
-    try {
-      execSync(`netsh interface ip add dns name="${alias}" 223.5.5.5 index=2`, { stdio: 'ignore', timeout: 2000 });
-    } catch {}
 
     // 3. 刷新系统 DNS 缓存
     execSync('ipconfig /flushdns', { stdio: 'ignore', timeout: 2000 });
