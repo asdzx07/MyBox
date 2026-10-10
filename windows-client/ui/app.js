@@ -518,25 +518,24 @@ async function loadSubs() {
     const data = await fetchRemote('/subscriptions');
     const subs = data.subscriptions || [];
     if (!subs.length) {
-      container.innerHTML = '<p class="empty-tip">暂无订阅。请在上方输入链接添加订阅，将直接推送至旁路由 Web 端并生效。</p>';
+      container.innerHTML = '<p class="empty-tip" style="padding:16px 0;text-align:center">还没有订阅，请在上方添加。</p>';
       return;
     }
     container.innerHTML = subs.map(s => {
-      const timeStr = s.updatedAt ? new Date(s.updatedAt).toLocaleString() : '未刷新';
+      const isEnabled = s.enabled !== false;
       return `
-        <div class="sub-item-card">
-          <div class="sub-item-info">
-            <div class="sub-item-title">
-              <span>${escapeHtml(s.name || '未命名订阅')}</span>
-              <span class="auth-pill-badge authed" style="font-size:11px">${s.nodeCount || 0} 个节点</span>
-              <span class="auth-pill-badge guest" style="font-size:11px">${escapeHtml(s.format || 'sub')}</span>
-            </div>
-            <div class="sub-item-meta" style="margin-top:2px">链接: <span style="font-family:monospace;word-break:break-all">${escapeHtml(s.url)}</span></div>
-            <div class="sub-item-meta" style="color:#a1a1aa;margin-top:2px">更新时间: ${timeStr}</div>
+        <div class="sub-row-item">
+          <label class="switch">
+            <input type="checkbox" onchange="toggleSub('${escapeHtml(s.id)}', this.checked)" ${isEnabled ? 'checked' : ''}>
+            <span></span>
+          </label>
+          <div class="sub-row-grow">
+            <div class="sub-row-name">${escapeHtml(s.name || s.id)}</div>
+            <div class="sub-row-desc" title="${escapeHtml(s.url || '')}">${escapeHtml(s.url || '')} · 节点: ${s.nodeCount ?? 0} 个</div>
           </div>
-          <div class="sub-item-actions">
+          <div class="sub-row-actions">
             <button class="small-btn" onclick="refreshSingleSub('${escapeHtml(s.id)}')">刷新</button>
-            <button class="small-btn danger" onclick="deleteSingleSub('${escapeHtml(s.id)}')">删除</button>
+            <button class="small-btn danger-text" onclick="deleteSingleSub('${escapeHtml(s.id)}')">删除</button>
           </div>
         </div>
       `;
@@ -556,6 +555,23 @@ async function loadSubs() {
     }
   }
 }
+
+window.toggleSub = async function(id, enabled) {
+  try {
+    toast(`正在${enabled ? '启用' : '停用'}订阅并热重载...`);
+    await fetchRemote(`/subscriptions/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    });
+    toast(`订阅已${enabled ? '启用' : '停用'}`);
+    await loadSubs();
+    await loadGroups();
+  } catch (err) {
+    toast(`操作失败: ${err.message}`);
+    await loadSubs();
+  }
+};
 
 window.refreshSingleSub = async function(id) {
   toast('正在向 Web 端请求刷新订阅...');
@@ -932,6 +948,7 @@ function bindEvents() {
   // 节点组与延迟测速
   $('btnReloadGroups')?.addEventListener('click', loadGroups);
   $('btnTestLatencyAll')?.addEventListener('click', testAllLatency);
+  $('btnGoToSubsPage')?.addEventListener('click', () => switchTab('subs'));
 
   // 订阅弹窗与添加
   $('btnOpenSubModal')?.addEventListener('click', openSubModal);

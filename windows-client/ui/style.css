@@ -848,39 +848,97 @@ header.top-header {
   gap: 10px;
 }
 
-/* 订阅列表卡片 */
-.sub-item-card {
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 14px 16px;
-  margin-bottom: 10px;
+/* Web 风格滑动胶囊开关 */
+.switch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  flex: 0 0 auto;
+  display: inline-block;
+}
+.switch input {
+  position: absolute;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+  z-index: 2;
+}
+.switch span {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: #cbd5e1;
+  transition: background .15s ease;
+}
+.switch span::after {
+  content: "";
+  position: absolute;
+  top: 3.5px;
+  left: 3.5px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
   background: #fff;
+  transition: transform .15s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+.switch input:checked + span {
+  background: #2563eb;
+}
+.switch input:checked + span::after {
+  transform: translateX(20px);
+}
+
+/* Web 端订阅列表项 */
+.sub-row-item {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 10px;
+  margin-bottom: 10px;
+  transition: all .15s ease;
 }
-
-.sub-item-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.sub-row-item:hover {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
 }
-
-.sub-item-title {
+.sub-row-grow {
+  flex: 1;
+  min-width: 0;
+}
+.sub-row-name {
   font-weight: 600;
-  font-size: 13.5px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  font-size: 14px;
+  color: #0f172a;
+  margin-bottom: 3px;
+  line-height: 1.2;
 }
-
-.sub-item-meta {
+.sub-row-desc {
   font-size: 12px;
-  color: var(--text-muted);
+  color: #64748b;
+  word-break: break-all;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 520px;
 }
-
-.sub-item-actions {
+.sub-row-actions {
   display: flex;
   gap: 8px;
+  align-items: center;
+}
+.small-btn.danger-text {
+  background: #fff;
+  color: #ef4444;
+  border: 1px solid #fee2e2;
+}
+.small-btn.danger-text:hover {
+  background: #fef2f2;
+  border-color: #fca5a5;
 }
 
