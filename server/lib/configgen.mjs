@@ -183,15 +183,15 @@ function buildOutbounds(settings) {
   const outbounds = [];
   const tags = new Set();
 
-  // 停用的订阅，它的节点不进配置。
-  // 节点上带 __subscriptionId 标记它属于哪条订阅；手工加的节点没这个标记，始终保留。
-  const disabledSubs = new Set(
-    settings.subscriptions.filter((s) => s.enabled === false).map((s) => s.id),
+  // 只有当前启用的订阅，其节点才进配置；已停用或已删除的订阅节点坚决不进配置
+  const enabledSubIds = new Set(
+    settings.subscriptions.filter((s) => s.enabled !== false).map((s) => s.id),
   );
 
   for (const n of settings.nodes) {
     if (!n?.tag || tags.has(n.tag)) continue;
-    if (n.__subscriptionId && disabledSubs.has(n.__subscriptionId)) continue;
+    // 关键拦截：如果节点关联了订阅，但该订阅不在启用列表中（已被删除或已停用），绝不进配置
+    if (n.__subscriptionId && !enabledSubIds.has(n.__subscriptionId)) continue;
     tags.add(n.tag);
     outbounds.push(clean(n));
   }
