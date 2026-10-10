@@ -8,6 +8,7 @@ import {
 } from './lib/paths.mjs';
 import { createLogger } from './lib/log.mjs';
 import { ensureDirs } from './lib/fsx.mjs';
+import { fetchTextLimited } from './lib/http-io.mjs';
 import { loadSettings, saveSettings, mutateSettings, newId, DEFAULT_POLICIES } from './lib/settings.mjs';
 import {
   isPasswordSet, setPassword, verifyPassword, issueToken, clearSessionCookie,
@@ -24,6 +25,8 @@ import { loadSavedClients, saveClients, scanLocalNetworkClients } from './lib/cl
 
 const log = createLogger('panel');
 const here = path.dirname(fileURLToPath(import.meta.url));
+const SUBSCRIPTION_TIMEOUT_MS = 30000;
+const SUBSCRIPTION_MAX_BYTES = 10 * 1024 * 1024;
 
 ensureDirs();
 platform.logPlatform();
@@ -310,9 +313,12 @@ async function refreshSubscription(id) {
   const sub = settings.subscriptions.find((s) => s.id === id);
   if (!sub) throw new Error('订阅不存在');
 
-  const res = await fetch(sub.url, { headers: { 'User-Agent': 'mybox/0.1' }, redirect: 'follow' });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const text = await res.text();
+  const text = await fetchTextLimited(sub.url, {
+    timeoutMs: SUBSCRIPTION_TIMEOUT_MS,
+    maxBytes: SUBSCRIPTION_MAX_BYTES,
+    headers: { 'User-Agent': 'mybox/0.1' },
+    redirect: 'follow',
+  });
 
   const { format, nodes } = parseSubscription(text);
   const tagged = dedupeTags(nodes.map((n) => ({ ...n, __subscriptionId: id })));
@@ -672,8 +678,8 @@ app.post('/api/kernel/:action', async (req, res) => {
   }
 });
 
-app.get('/api/kernel/log', (req, res) => {
-  res.json({ log: kernel.tailLog(Number(req.query.lines) || 200) });
+app.get('/api/kernel/log', async (req, res) => {
+  res.json({ log: await kernel.tailLogAsync(Number(req.query.lines) || 200) });
 });
 
 app.get('/api/kernel/latest', async (req, res) => {

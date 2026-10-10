@@ -1,4 +1,5 @@
 import { spawn, execFile, execFileSync } from 'node:child_process';
+import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -7,6 +8,7 @@ import {
 } from './paths.mjs';
 import { readJson, writeJsonAtomic, ensureDirs } from './fsx.mjs';
 import { createLogger } from './log.mjs';
+import { downloadToFile, fetchTextLimited } from './http-io.mjs';
 import * as platform from './platform.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -14,6 +16,13 @@ const log = createLogger('kernel');
 
 const REPO = 'SagerNet/sing-box';
 const MIRRORS = ['', 'https://ghfast.top', 'https://gh-proxy.com'];
+const RELEASE_METADATA_MAX_BYTES = 2 * 1024 * 1024;
+const KERNEL_ARCHIVE_MAX_BYTES = 128 * 1024 * 1024;
+const KERNEL_DOWNLOAD_TOTAL_TIMEOUT_MS = 180000;
+const KERNEL_BINARY_MAX_BYTES = 256 * 1024 * 1024;
+const LOG_MAX_LINES = 1000;
+const LOG_MAX_BYTES = 1024 * 1024;
+const LOG_READ_TIMEOUT_MS = 5000;
 const PID_FILE = path.join(DATA_DIR, 'kernel.pid');
 const LOG_FILE = path.join(DATA_DIR, 'kernel.log');
 
@@ -53,16 +62,22 @@ function archSuffix() {
 export async function fetchLatestVersion({ includePrerelease = false } = {}) {
   if (!includePrerelease) {
     const url = `https://api.github.com/repos/${REPO}/releases/latest`;
-    const res = await fetch(url, { headers: { 'User-Agent': 'mybox' } });
-    if (!res.ok) throw new Error(`查询最新版本失败：HTTP ${res.status}`);
-    const json = await res.json();
+    const text = await fetchTextLimited(url, {
+      timeoutMs: 10000,
+      maxBytes: RELEASE_METADATA_MAX_BYTES,
+      headers: { 'User-Agent': 'mybox' },
+    });
+    const json = JSON.parse(text);
     return { version: json.tag_name, publishedAt: json.published_at };
   }
   // 取最新的 1.15 预发布版
   const url = `https://api.github.com/repos/${REPO}/releases?per_page=20`;
-  const res = await fetch(url, { headers: { 'User-Agent': 'mybox' } });
-  if (!res.ok) throw new Error(`查询版本列表失败：HTTP ${res.status}`);
-  const list = await res.json();
+  const text = await fetchTextLimited(url, {
+    timeoutMs: 10000,
+    maxBytes: RELEASE_METADATA_MAX_BYTES,
+    headers: { 'User-Agent': 'mybox' },
+  });
+  const list = JSON.parse(text);
   const hit = list.find((r) => /^v1\.15\./.test(r.tag_name));
   if (!hit) throw new Error('没找到 1.15 版本');
   return { version: hit.tag_name, publishedAt: hit.published_at, prerelease: true };
@@ -72,12 +87,10 @@ function assetName(version, suffix) {
   return `sing-box-${version.replace(/^v/, '')}-${suffix}.tar.gz`;
 }
 
-async function download(url, dest) {
-  const res = await fetch(url, { headers: { 'User-Agent': 'mybox' }, redirect: 'follow' });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const buf = Buffer.from(await res.arrayBuffer());
-  fs.writeFileSync(dest, buf);
-  return buf.length;
+async function sha256File(file) {
+  const hash = createHash('sha256');
+  for await (const chunk of fs.createReadStream(file)) hash.update(chunk);
+  return hash.digest('hex');
 }
 
 /**
@@ -90,52 +103,67 @@ export async function installKernel(version, { onProgress = () => {} } = {}) {
   const asset = assetName(version, suffix);
   const tmpDir = path.join(DATA_DIR, 'tmp');
   fs.mkdirSync(tmpDir, { recursive: true });
-  const tarball = path.join(tmpDir, asset);
+  const workDir = fs.mkdtempSync(path.join(tmpDir, 'kernel-install-'));
+  const tarball = path.join(workDir, asset);
+  let staged;
 
-  let lastError;
-  for (const mirror of MIRRORS) {
-    const base = `https://github.com/${REPO}/releases/download/${version}/${asset}`;
-    // mirror 为空表示直连，不能拼成 "/https://..." —— 那是个非法 URL，fetch 直接抛
-    const url = mirror ? `${mirror}/${base}` : base;
-    try {
-      onProgress(`下载 ${asset}${mirror ? `（镜像 ${mirror}）` : ''}`);
-      const size = await download(url, tarball);
-      lastError = null;
-      onProgress(`下载完成 ${(size / 1048576).toFixed(1)} MB`);
-      break;
-    } catch (err) {
-      lastError = err;
+  try {
+    let lastError;
+    const downloadDeadline = Date.now() + KERNEL_DOWNLOAD_TOTAL_TIMEOUT_MS;
+    for (const mirror of MIRRORS) {
+      const remainingMs = downloadDeadline - Date.now();
+      if (remainingMs <= 0) {
+        lastError = new Error('下载超时（已达到总时限）');
+        break;
+      }
+      const base = `https://github.com/${REPO}/releases/download/${version}/${asset}`;
+      // mirror 为空表示直连，不能拼成 "/https://..." —— 那是个非法 URL，fetch 直接抛
+      const url = mirror ? `${mirror}/${base}` : base;
+      try {
+        onProgress(`下载 ${asset}${mirror ? `（镜像 ${mirror}）` : ''}`);
+        const size = await downloadToFile(url, tarball, {
+          timeoutMs: Math.min(90000, remainingMs),
+          maxBytes: KERNEL_ARCHIVE_MAX_BYTES,
+          headers: { 'User-Agent': 'mybox' },
+          onProgress: () => {},
+        });
+        lastError = null;
+        onProgress(`下载完成 ${(size / 1048576).toFixed(1)} MB`);
+        break;
+      } catch (err) {
+        lastError = err;
+      }
     }
+    if (lastError) throw new Error(`下载内核失败（直连和镜像都试过了）：${lastError.message}`);
+
+    onProgress('解包');
+    await execFileAsync('tar', ['-xzf', tarball, '-C', workDir], { timeout: 120000 });
+    const entries = await fs.promises.readdir(workDir);
+    const extracted = entries.find((n) => n.startsWith(`sing-box-${version.replace(/^v/, '')}`) && n.includes(suffix));
+    if (!extracted) throw new Error('解包后找不到内核文件');
+
+    const src = path.join(workDir, extracted, 'sing-box');
+    const stat = await fs.promises.stat(src).catch(() => null);
+    if (!stat?.isFile()) throw new Error('解包结果里没有 sing-box 可执行文件');
+    if (stat.size > KERNEL_BINARY_MAX_BYTES) throw new Error('解包后的内核超过大小限制');
+    const sha256 = await sha256File(src);
+
+    // 不能直接覆盖正在运行的内核——Linux 会报 ETXTBSY（text file busy）。
+    // 先写到同目录的唯一临时文件，再 rename 原子替换：运行中的进程保留旧 inode。
+    staged = path.join(BIN_DIR, `.sing-box-${process.pid}-${randomUUID()}.new`);
+    await fs.promises.copyFile(src, staged);
+    await fs.promises.chmod(staged, 0o755);
+    await fs.promises.rename(staged, SINGBOX_BIN);
+    staged = null;
+
+    const info = { version, asset, sha256, installedAt: new Date().toISOString() };
+    writeJsonAtomic(VERSION_FILE, info, { mode: 0o644 });
+    onProgress(`已安装 ${version}`);
+    return info;
+  } finally {
+    if (staged) await fs.promises.rm(staged, { force: true }).catch(() => {});
+    await fs.promises.rm(workDir, { recursive: true, force: true }).catch(() => {});
   }
-  if (lastError) throw new Error(`下载内核失败（直连和镜像都试过了）：${lastError.message}`);
-
-  onProgress('解包');
-  await execFileAsync('tar', ['-xzf', tarball, '-C', tmpDir]);
-  const extracted = fs.readdirSync(tmpDir).find((n) => n.startsWith(`sing-box-${version.replace(/^v/, '')}`) && n.includes(suffix));
-  if (!extracted) throw new Error('解包后找不到内核文件');
-
-  const src = path.join(tmpDir, extracted, 'sing-box');
-  if (!fs.existsSync(src)) throw new Error('解包结果里没有 sing-box 可执行文件');
-
-  const { createHash } = await import('node:crypto');
-  const buf = fs.readFileSync(src);
-  const sha256 = createHash('sha256').update(buf).digest('hex');
-
-  // 不能直接覆盖正在运行的内核——Linux 会报 ETXTBSY（text file busy）。
-  // 先写到同目录的临时文件，再 rename 原子替换：运行中的进程保留旧 inode，
-  // 替换本身不受影响，重启内核后才切到新二进制。
-  const staged = path.join(BIN_DIR, '.sing-box.new');
-  fs.copyFileSync(src, staged);
-  fs.chmodSync(staged, 0o755);
-  fs.renameSync(staged, SINGBOX_BIN);
-
-  fs.rmSync(tarball, { force: true });
-  fs.rmSync(path.join(tmpDir, extracted), { recursive: true, force: true });
-
-  const info = { version, asset, sha256, installedAt: new Date().toISOString() };
-  writeJsonAtomic(VERSION_FILE, info, { mode: 0o644 });
-  onProgress(`已安装 ${version}`);
-  return info;
 }
 
 /* ------------------------------------------------------------ 配置校验 */
@@ -345,7 +373,7 @@ export async function restart() {
     if (!r.ok) throw new Error(r.out || '服务重启失败');
     await platform.serviceEnable(platform.SERVICES.kernel, true);
     if (!(await waitForResponding())) {
-      const tail = tailLog(30);
+      const tail = await tailLogAsync(30);
       throw new Error(`内核启动后没能保持在运行状态${tail ? `\n日志尾部：\n${tail}` : ''}`);
     }
     return status();
@@ -355,26 +383,114 @@ export async function restart() {
   return start();
 }
 
-export function tailLog(lines = 200) {
+function normalizeLogLines(lines) {
+  const value = Number(lines);
+  if (!Number.isFinite(value)) return 200;
+  return Math.min(LOG_MAX_LINES, Math.max(1, Math.trunc(value)));
+}
+
+function sliceLogTail(text, lines, discardPartialFirstLine = false) {
+  let content = text;
+  if (discardPartialFirstLine) {
+    const newline = content.indexOf('\n');
+    content = newline < 0 ? '' : content.slice(newline + 1);
+  }
+  const entries = content.split('\n');
+  if (entries.at(-1) === '') entries.pop();
+  return entries.slice(-lines).join('\n');
+}
+
+function fileTailReadSize(fileSize, lines) {
+  return Math.min(fileSize, LOG_MAX_BYTES, Math.max(64 * 1024, lines * 4096));
+}
+
+async function readLogFileTail(file, lines) {
+  let handle;
+  try {
+    handle = await fs.promises.open(file, 'r');
+    const stat = await handle.stat();
+    const size = fileTailReadSize(stat.size, lines);
+    if (!size) return '';
+    const start = stat.size - size;
+    const buffer = Buffer.allocUnsafe(size);
+    const { bytesRead } = await handle.read(buffer, 0, size, start);
+    return sliceLogTail(buffer.toString('utf8', 0, bytesRead), lines, start > 0);
+  } catch {
+    return '';
+  } finally {
+    await handle?.close().catch(() => {});
+  }
+}
+
+export async function tailLogAsync(lines = 200) {
+  const limit = normalizeLogLines(lines);
   const plat = platform.detect();
   if (supervised() && plat.id === 'systemd') {
     try {
-      return execFileSync('journalctl', ['-u', platform.SERVICES.kernel, '-n', String(lines), '--no-pager'], { timeout: 10000 }).toString();
+      const { stdout } = await execFileAsync(
+        'journalctl',
+        ['-u', platform.SERVICES.kernel, '-n', String(limit), '--no-pager'],
+        { timeout: LOG_READ_TIMEOUT_MS, maxBuffer: LOG_MAX_BYTES, encoding: 'utf8' },
+      );
+      return sliceLogTail(stdout, limit);
     } catch {
       return '';
     }
   }
   if (supervised() && plat.id === 'openwrt') {
     try {
-      return execFileSync('logread', ['-e', 'sing-box'], { timeout: 10000 }).toString();
+      const { stdout } = await execFileAsync(
+        'logread',
+        ['-e', 'sing-box', '-l', String(limit)],
+        { timeout: LOG_READ_TIMEOUT_MS, maxBuffer: LOG_MAX_BYTES, encoding: 'utf8' },
+      );
+      return sliceLogTail(stdout, limit);
     } catch {
       return '';
     }
   }
+  return readLogFileTail(LOG_FILE, limit);
+}
+
+/** 同步兼容入口；服务端路由应使用 tailLogAsync 避免阻塞事件循环。 */
+export function tailLog(lines = 200) {
+  const limit = normalizeLogLines(lines);
+  const plat = platform.detect();
+  if (supervised() && plat.id === 'systemd') {
+    try {
+      return execFileSync(
+        'journalctl',
+        ['-u', platform.SERVICES.kernel, '-n', String(limit), '--no-pager'],
+        { timeout: LOG_READ_TIMEOUT_MS, maxBuffer: LOG_MAX_BYTES, encoding: 'utf8' },
+      );
+    } catch {
+      return '';
+    }
+  }
+  if (supervised() && plat.id === 'openwrt') {
+    try {
+      return execFileSync(
+        'logread',
+        ['-e', 'sing-box', '-l', String(limit)],
+        { timeout: LOG_READ_TIMEOUT_MS, maxBuffer: LOG_MAX_BYTES, encoding: 'utf8' },
+      );
+    } catch {
+      return '';
+    }
+  }
+  let fd;
   try {
-    const content = fs.readFileSync(LOG_FILE, 'utf8');
-    return content.split('\n').slice(-lines).join('\n');
+    fd = fs.openSync(LOG_FILE, 'r');
+    const fileSize = fs.fstatSync(fd).size;
+    const size = fileTailReadSize(fileSize, limit);
+    if (!size) return '';
+    const start = fileSize - size;
+    const buffer = Buffer.allocUnsafe(size);
+    const bytesRead = fs.readSync(fd, buffer, 0, size, start);
+    return sliceLogTail(buffer.toString('utf8', 0, bytesRead), limit, start > 0);
   } catch {
     return '';
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
   }
 }
