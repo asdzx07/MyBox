@@ -5,14 +5,36 @@
  *   MYBOX_ROOT=./runtime node tools/selftest.mjs
  *   ./runtime/bin/sing-box check -c ./runtime/etc/config.json
  *
+ * 其它 MYBOX_ROOT 路径默认拒绝清理；确认是独立测试目录后追加 --allow-external-root（生产目录始终禁止）。
  * 这个脚本不联网，只用本地数据，方便在没有订阅时也能验证配置生成逻辑。
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { validateSelftestRoot } from './selftest-guard.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-process.env.MYBOX_ROOT ||= path.join(here, '..', 'runtime');
+const projectRoot = path.resolve(here, '..');
+const allowExternalRoot = process.argv.includes('--allow-external-root');
+let configuredRoot;
+
+try {
+  const validation = validateSelftestRoot({
+    projectRoot,
+    configuredRoot: process.env.MYBOX_ROOT,
+    allowExternalRoot,
+  });
+  configuredRoot = validation.root;
+  console.log(`[selftest] 将重置数据目录：${path.join(configuredRoot, 'etc')}、${path.join(configuredRoot, 'data')}`);
+  if (allowExternalRoot && validation.isExternal) {
+    console.warn('[selftest] 已通过 --allow-external-root 明确允许清理自定义运行目录。');
+  }
+} catch (err) {
+  console.error(err.message);
+  process.exit(1);
+}
+
+process.env.MYBOX_ROOT = configuredRoot;
 
 const { ensureDirs, writeJsonAtomic, writeSmallFile } = await import('../server/lib/fsx.mjs');
 const { loadSettings, mutateSettings } = await import('../server/lib/settings.mjs');

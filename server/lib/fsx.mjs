@@ -18,6 +18,11 @@ export function readJson(file, fallback = null) {
   }
 }
 
+/** Strict JSON read for critical user data that must never be silently replaced. */
+export function readJsonStrict(file) {
+  return JSON.parse(fs.readFileSync(file, 'utf8'));
+}
+
 /**
  * 原子写 JSON：先写临时文件，再 rename 覆盖。
  *
