@@ -5,3 +5,5 @@ runtime/
 data/
 etc/
 bin/
+.profile/
+.edge-profile/

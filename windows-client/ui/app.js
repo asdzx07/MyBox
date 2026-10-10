@@ -150,42 +150,81 @@ async function syncLocalStatus() {
 
 function renderStatusUI() {
   const capsule = $('topCapsule');
-  const capsuleTime = $('capsuleTime');
+  const capsuleText = $('capsuleText');
+  const capsuleIcon = $('capsuleIcon');
   const gwTitle = $('gwTitle');
   const gwDesc = $('gwDesc');
   const btnGw = $('btnToggleGw');
   const btnGwText = $('btnGwText');
 
-  $('infoGwIp').textContent = localState.gatewayIp || '192.168.3.2';
+  const curIp = localState.gatewayIp || '192.168.3.2';
+  if ($('quickGwIp') && document.activeElement !== $('quickGwIp')) {
+    $('quickGwIp').value = curIp;
+  }
+  if ($('cfgGatewayIp') && document.activeElement !== $('cfgGatewayIp')) {
+    $('cfgGatewayIp').value = curIp;
+  }
+
   $('infoLocalIp').textContent = localState.activeInterface?.ip ? `${localState.activeInterface.ip} (网卡: ${localState.activeInterface.alias || '以太网'})` : '192.168.3.x';
   $('infoPing').textContent = localState.latency !== null ? `${localState.latency} ms` : '超时或离线';
 
   if (localState.connected) {
     capsule.className = 'status-capsule connected';
+    capsule.title = '当前已连接，点击断开并恢复网络设置';
+    capsuleIcon.textContent = '■';
     if (!connTimer) {
-      connTimer = setInterval(() => {
-        connDurationSec++;
+      const updateTimer = () => {
         const m = Math.floor(connDurationSec / 60);
         const s = connDurationSec % 60;
-        capsuleTime.textContent = `${m}:${s < 10 ? '0' : ''}${s} ■`;
+        capsuleText.textContent = `${m}:${s < 10 ? '0' : ''}${s}`;
+      };
+      updateTimer();
+      connTimer = setInterval(() => {
+        connDurationSec++;
+        updateTimer();
       }, 1000);
     }
-    gwTitle.textContent = '当前状态：已接管 (经由旁路由 192.168.3.2 代理分流)';
-    gwDesc.textContent = 'Windows 保持主路由 192.168.3.1 自动分配 IP 不变，全局流量由旁路由 MyBox 接管。';
+    gwTitle.textContent = `当前状态：已接管 (经由旁路由 ${curIp} 代理分流)`;
+    gwDesc.textContent = 'Windows 网关与 DNS 已指向旁路由，全局流量正由 MyBox 智能分流。再次点击即可恢复。';
     btnGw.className = 'btn-toggle-gw active';
     btnGwText.textContent = '断开 (恢复主路由直连)';
-    $('infoGwMode').textContent = `旁路由代理 (${localState.gatewayIp})`;
+    $('infoGwMode').textContent = `旁路由代理 (${curIp})`;
   } else {
     capsule.className = 'status-capsule';
+    capsule.title = '当前未连接，点击修改网络设置并连接旁路由';
     clearInterval(connTimer);
     connTimer = null;
     connDurationSec = 0;
-    capsuleTime.textContent = '未连接 ▶';
-    gwTitle.textContent = '当前状态：直连主路由 192.168.3.1 (未走旁路由)';
-    gwDesc.textContent = 'Windows 保持主路由 192.168.3.1 自动分配 IP 不变。点击右侧按钮瞬间切换为旁路由代理分流。';
+    capsuleText.textContent = '';
+    capsuleIcon.textContent = '▶';
+    gwTitle.textContent = '当前状态：未连接 (保持主路由 DHCP 默认网络)';
+    gwDesc.textContent = '当前网络保持主路由自动分配。点击顶部胶囊或右侧按钮瞬间接入旁路由代理。';
     btnGw.className = 'btn-toggle-gw';
     btnGwText.textContent = '一键连接旁路由';
-    $('infoGwMode').textContent = '主路由直连 (192.168.3.1)';
+    $('infoGwMode').textContent = '主路由直连 (自动分配)';
+  }
+}
+
+async function saveQuickIp() {
+  const ip = $('quickGwIp')?.value?.trim();
+  if (!ip) {
+    toast('请输入有效的旁路由 IP 地址');
+    return;
+  }
+  try {
+    toast(`正在保存旁路由 IP: ${ip}...`);
+    await fetchLocal('/api/local/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gatewayIp: ip }),
+    });
+    localState.gatewayIp = ip;
+    if ($('cfgGatewayIp')) $('cfgGatewayIp').value = ip;
+    toast(`旁路由 IP 已更新为 ${ip}`);
+    await syncLocalStatus();
+    await pollOverview();
+  } catch (err) {
+    toast(`保存旁路由 IP 失败: ${err.message}`);
   }
 }
 
@@ -532,6 +571,7 @@ async function saveClientConfig() {
     });
     localState.gatewayIp = ip;
     localState.gatewayPort = port;
+    if ($('quickGwIp')) $('quickGwIp').value = ip;
     toast('配置已保存！正在重新同步状态...');
     await syncLocalStatus();
   } catch (err) {
@@ -603,6 +643,12 @@ function bindEvents() {
   $('topCapsule')?.addEventListener('click', toggleGateway);
   $('btnToggleGw')?.addEventListener('click', toggleGateway);
 
+  // 快捷保存旁路由 IP
+  $('btnQuickSaveIp')?.addEventListener('click', saveQuickIp);
+  $('quickGwIp')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') saveQuickIp();
+  });
+
   $('btnRefreshAll')?.addEventListener('click', () => {
     toast('正在刷新数据...');
     syncLocalStatus();
@@ -646,8 +692,22 @@ window.addEventListener('DOMContentLoaded', async () => {
   await pollOverview();
   await pollTraffic();
 
+  // 定时向本地服务发送心跳保活
+  setInterval(() => {
+    fetch('/api/local/heartbeat').catch(() => {});
+  }, 2500);
+
   // 定时刷新状态与速率
   setInterval(syncLocalStatus, 5000);
   setInterval(pollOverview, 4000);
   setInterval(pollTraffic, 2000);
+});
+
+// 窗口关闭时自动通知后台断开并恢复网络
+window.addEventListener('beforeunload', () => {
+  if (localState.connected) {
+    try {
+      navigator.sendBeacon('/api/local/disconnect');
+    } catch {}
+  }
 });

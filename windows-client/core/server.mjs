@@ -17,7 +17,7 @@ let config = {
   gatewayPort: 3036,
   password: '',
   sessionCookie: '',
-  autoConnect: true,
+  autoConnect: false,
 };
 
 try {
@@ -76,6 +76,20 @@ const MIME_TYPES = {
   '.png': 'image/png',
   '.ico': 'image/x-icon',
 };
+
+// 前端心跳与无界面自动还原安全退出机制
+let lastHeartbeat = Date.now();
+let clientConnected = false;
+
+setInterval(() => {
+  if (clientConnected && Date.now() - lastHeartbeat > 8000) {
+    console.log('[MyBox Windows Companion] 检测到前端界面已关闭(心跳超时)，正在还原网络并安全退出...');
+    try {
+      disconnectGateway(config.gatewayIp);
+    } catch {}
+    process.exit(0);
+  }
+}, 3000);
 
 const server = http.createServer(async (req, res) => {
   const urlObj = new URL(req.url, `http://${req.headers.host}`);
@@ -141,6 +155,14 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify({ ok: false, error: err.message }));
       }
     });
+    return;
+  }
+
+  if (pathname === '/api/local/heartbeat') {
+    lastHeartbeat = Date.now();
+    clientConnected = true;
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, time: lastHeartbeat }));
     return;
   }
 

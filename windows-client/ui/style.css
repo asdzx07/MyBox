@@ -127,32 +127,56 @@ header.top-header {
 }
 
 .status-capsule {
-  display: flex;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  background: #e4e7ec;
-  padding: 4px 10px;
-  border-radius: 8px;
+  background: #f3f4f6;
+  color: #4b5563;
+  padding: 5px 12px;
+  border-radius: 14px;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  transition: all 0.15s ease;
+  user-select: none;
+  min-height: 28px;
+}
+
+.status-capsule:hover {
+  background: #e5e7eb;
+  color: #1f2937;
+  transform: translateY(-0.5px);
+}
+
+.status-capsule:active {
+  transform: scale(0.97);
 }
 
 .status-capsule.connected {
   background: #dcfce7;
   color: #15803d;
+  border-color: rgba(34, 197, 94, 0.2);
 }
 
-.status-capsule:hover {
-  filter: brightness(0.96);
+.status-capsule.connected:hover {
+  background: #bbf7d0;
+  color: #166534;
 }
 
-.capsule-sq {
-  width: 8px;
-  height: 8px;
-  background: currentColor;
-  border-radius: 2px;
+.capsule-text {
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.capsule-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  line-height: 1;
 }
 
 .view-title {
@@ -258,8 +282,46 @@ header.top-header {
 .info-row {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   font-size: 13px;
   margin-bottom: 8px;
+}
+
+.quick-ip-input {
+  width: 120px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-family: monospace;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  outline: none;
+  background: #f8fafc;
+  color: var(--accent);
+  text-align: right;
+  transition: all 0.15s;
+}
+
+.quick-ip-input:focus {
+  border-color: var(--accent);
+  background: #fff;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.15);
+}
+
+.mini-btn {
+  background: #18181b;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.mini-btn:hover {
+  background: #27272a;
 }
 
 .info-row:last-child { margin-bottom: 0; }

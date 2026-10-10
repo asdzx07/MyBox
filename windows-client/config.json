@@ -1,5 +1,7 @@
 {
   "gatewayIp": "192.168.3.2",
   "gatewayPort": 3036,
-  "autoConnect": true
+  "password": "",
+  "sessionCookie": "",
+  "autoConnect": false
 }
