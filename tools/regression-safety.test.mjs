@@ -84,6 +84,26 @@ test('invalid settings JSON is preserved and reported instead of overwritten', (
   assert.ok(loadSettings({ force: true }).policies.length > 0);
 });
 
+test('cached settings avoid disk parsing until an explicit force reload', () => {
+  const settingsPath = path.join(runtime, 'data', 'settings.json');
+  mutateSettings((settings) => {
+    settings.meta.cacheBoundary = 'in-process';
+  });
+  const cached = loadSettings();
+
+  const external = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+  external.meta.cacheBoundary = 'external-write';
+  fs.writeFileSync(settingsPath, `${JSON.stringify(external, null, 2)}\n`);
+
+  assert.strictEqual(loadSettings(), cached);
+  assert.equal(loadSettings().meta.cacheBoundary, 'in-process');
+  assert.equal(loadSettings({ force: true }).meta.cacheBoundary, 'external-write');
+
+  mutateSettings((settings) => {
+    delete settings.meta.cacheBoundary;
+  });
+});
+
 test('deploy calls are serialized and the queue recovers after failure', async () => {
   mutateSettings((settings) => {
     for (const policy of settings.policies) policy.rulesets = ['geosite-cn'];
