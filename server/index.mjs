@@ -175,12 +175,35 @@ app.put('/api/settings', (req, res) => {
 app.get('/api/subscriptions', (req, res) => {
   const { subscriptions, nodes } = loadSettings({ force: true });
   res.json({
-    subscriptions: subscriptions.map((s) => ({
-      ...s,
-      nodeCount: nodes.filter((n) => n.__subscriptionId === s.id).length,
-    })),
+    subscriptions: subscriptions.map((s) => {
+      const subNodes = nodes.filter((n) => n.__subscriptionId === s.id);
+      return {
+        ...s,
+        nodeCount: subNodes.length,
+        sampleNodes: subNodes.slice(0, 4).map((n) => n.tag),
+      };
+    }),
     totalNodes: nodes.length,
   });
+});
+
+/** 清理未关联任何现有订阅的孤儿节点并自动部署 */
+app.post('/api/nodes/prune', async (req, res) => {
+  let removedCount = 0;
+  mutateSettings((s) => {
+    const validSubIds = new Set(s.subscriptions.map((x) => x.id));
+    const before = s.nodes.length;
+    // 只保留确实属于当前有效订阅的节点
+    s.nodes = s.nodes.filter((n) => n.__subscriptionId && validSubIds.has(n.__subscriptionId));
+    removedCount = before - s.nodes.length;
+  });
+  try {
+    await deploy.deploy({ restart: true });
+  } catch (err) {
+    log.warn('清理节点后自动部署告警：%s', err.message);
+  }
+  log.info('已清理孤儿/未关联节点 %d 个并已重新部署', removedCount);
+  res.json({ ok: true, removedCount });
 });
 
 app.post('/api/subscriptions', async (req, res) => {

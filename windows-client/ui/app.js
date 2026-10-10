@@ -523,6 +523,7 @@ async function loadSubs() {
     }
     container.innerHTML = subs.map(s => {
       const isEnabled = s.enabled !== false;
+      const sampleText = (s.sampleNodes && s.sampleNodes.length) ? ` [含: ${s.sampleNodes.join(', ')}...]` : '';
       return `
         <div class="sub-row-item">
           <label class="switch">
@@ -530,7 +531,7 @@ async function loadSubs() {
             <span></span>
           </label>
           <div class="sub-row-grow">
-            <div class="sub-row-name">${escapeHtml(s.name || s.id)}</div>
+            <div class="sub-row-name">${escapeHtml(s.name || s.id)} <span style="font-size:11.5px;color:var(--text-muted);font-weight:normal">${sampleText}</span></div>
             <div class="sub-row-desc" title="${escapeHtml(s.url || '')}">${escapeHtml(s.url || '')} · 节点: ${s.nodeCount ?? 0} 个</div>
           </div>
           <div class="sub-row-actions">
@@ -615,6 +616,19 @@ async function refreshAllSubs() {
     await loadGroups();
   } catch (err) {
     toast(`批量刷新失败: ${err.message}`);
+  }
+}
+
+async function pruneOrphanNodes() {
+  if (!confirm('确定清理所有不属于现有订阅的游离/残留节点吗？清理后内核将自动热重载。')) return;
+  toast('正在清理残留节点并重新部署...');
+  try {
+    const res = await fetchRemote('/nodes/prune', { method: 'POST' });
+    toast(`清理完成！已移除 ${res.removedCount ?? 0} 个残留节点`);
+    await loadSubs();
+    await loadGroups();
+  } catch (err) {
+    toast(`清理失败: ${err.message}`);
   }
 }
 
@@ -966,6 +980,7 @@ function bindEvents() {
     addSubscription(name, url);
   });
   $('btnRefreshAllSubs')?.addEventListener('click', refreshAllSubs);
+  $('btnPruneNodes')?.addEventListener('click', pruneOrphanNodes);
 
   // 策略与连接
   $('btnSavePoliciesLocal')?.addEventListener('click', savePolicies);

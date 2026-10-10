@@ -190,7 +190,10 @@
         <div class="panel-box" style="padding:20px;border-radius:14px;background:#fff;border:1px solid var(--border)">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
             <h3 style="margin:0;font-size:15px;font-weight:600;color:#1e293b">已有订阅</h3>
-            <button class="small-btn" id="btnRefreshAllSubs" style="font-size:12px;padding:5px 12px">全部刷新</button>
+            <div style="display:flex;gap:8px">
+              <button class="small-btn danger-text" id="btnPruneNodes" title="一键清理不属于任何现有订阅的游离/幽灵节点">🧹 清理残留节点</button>
+              <button class="small-btn" id="btnRefreshAllSubs" style="font-size:12px;padding:5px 12px">全部刷新</button>
+            </div>
           </div>
           <div id="subsListContainer" class="sub-list-container">
             <p class="empty-tip">正在加载订阅列表...</p>
