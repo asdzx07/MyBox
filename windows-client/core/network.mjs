@@ -43,43 +43,38 @@ export function getActiveInterface() {
 }
 
 /**
- * 检查当前是否已通过低跃点默认路由接入旁路由
+ * 检查当前是否已通过旁路由接管路由
  */
 export function isConnectedToGateway(gatewayIp = '192.168.3.2') {
   try {
     const out = execSync(`route print 0.0.0.0`, { encoding: 'utf8' });
-    const lines = out.split('\n');
-    for (const line of lines) {
-      if (line.includes('0.0.0.0') && line.includes(gatewayIp)) {
-        return true;
-      }
-    }
-    return false;
+    return out.includes(gatewayIp);
   } catch {
     return false;
   }
 }
 
 /**
- * 连接旁路由：添加高优先级默认网关路由并将 DNS 指向旁路由
+ * 连接旁路由：使用工业级双 /1 路由(0.0.0.0/1 + 128.0.0.0/1)最长前缀匹配接管全量流量，并将 DNS 指向旁路由
  */
 export function connectGateway(gatewayIp = '192.168.3.2') {
   const iface = getActiveInterface();
   const ifIndex = iface.index || 19;
 
-  // 1. 先安全移除已有的该网关路由，避免重复
-  try {
-    execSync(`route delete 0.0.0.0 ${gatewayIp}`, { stdio: 'ignore' });
-  } catch {}
+  // 1. 先安全清理旧的可能存在的该网关路由
+  try { execSync(`route delete 0.0.0.0 mask 128.0.0.0 ${gatewayIp}`, { stdio: 'ignore' }); } catch {}
+  try { execSync(`route delete 128.0.0.0 mask 128.0.0.0 ${gatewayIp}`, { stdio: 'ignore' }); } catch {}
+  try { execSync(`route delete 0.0.0.0 ${gatewayIp}`, { stdio: 'ignore' }); } catch {}
 
-  // 2. 添加 metric 为 5 的高优先级默认路由
+  // 2. 添加最长前缀匹配的双 /1 路由，严格且必定优先于主路由 0.0.0.0/0
   try {
-    execSync(`route add 0.0.0.0 mask 0.0.0.0 ${gatewayIp} metric 5 if ${ifIndex}`, { stdio: 'pipe' });
+    execSync(`route add 0.0.0.0 mask 128.0.0.0 ${gatewayIp} metric 1 if ${ifIndex}`, { stdio: 'pipe' });
+    execSync(`route add 128.0.0.0 mask 128.0.0.0 ${gatewayIp} metric 1 if ${ifIndex}`, { stdio: 'pipe' });
   } catch (err) {
-    throw new Error(`添加高优先级路由失败(请确保以管理员身份运行): ${err.message}`);
+    throw new Error(`添加接管路由失败(请确保以管理员身份运行): ${err.message}`);
   }
 
-  // 3. 将 DNS 切换为旁路由 IP
+  // 3. 将 DNS 切换为旁路由 IP 并清空缓存
   try {
     const dnsCmd = `Set-DnsClientServerAddress -InterfaceIndex ${ifIndex} -ServerAddresses ("${gatewayIp}")`;
     execSync(`powershell -NoProfile -Command "${dnsCmd}"`, { stdio: 'pipe' });
@@ -92,16 +87,16 @@ export function connectGateway(gatewayIp = '192.168.3.2') {
 }
 
 /**
- * 断开旁路由：删除临时路由并将 DNS 恢复为 DHCP 自动获取
+ * 断开旁路由：删除双 /1 路由并将 DNS 恢复为 DHCP 自动获取
  */
 export function disconnectGateway(gatewayIp = '192.168.3.2') {
   const iface = getActiveInterface();
   const ifIndex = iface.index || 19;
 
-  // 1. 删除临时低跃点路由
-  try {
-    execSync(`route delete 0.0.0.0 ${gatewayIp}`, { stdio: 'ignore' });
-  } catch {}
+  // 1. 删除双 /1 临时路由及 /0 路由
+  try { execSync(`route delete 0.0.0.0 mask 128.0.0.0 ${gatewayIp}`, { stdio: 'ignore' }); } catch {}
+  try { execSync(`route delete 128.0.0.0 mask 128.0.0.0 ${gatewayIp}`, { stdio: 'ignore' }); } catch {}
+  try { execSync(`route delete 0.0.0.0 ${gatewayIp}`, { stdio: 'ignore' }); } catch {}
 
   // 2. 恢复 DNS 为自动获取 (DHCP)
   try {

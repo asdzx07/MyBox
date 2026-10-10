@@ -147,7 +147,10 @@
               <h3>目标分流策略</h3>
               <p class="sub-tip">直接在此处修改策略的出口目标（直连、拒绝、特定组或节点），保存后内核自动热应用。</p>
             </div>
-            <button class="small-btn primary" id="btnSavePoliciesLocal">保存策略并应用</button>
+            <div style="display:flex;gap:8px">
+              <button class="small-btn danger" id="btnResetPoliciesLocal" title="如果策略错乱，一键还原官方默认出站分流">恢复默认策略</button>
+              <button class="small-btn primary" id="btnSavePoliciesLocal">保存策略并应用</button>
+            </div>
           </div>
           <div id="policyListContainer" class="policy-stack">
             <p class="empty-tip">正在拉取分流策略...</p>

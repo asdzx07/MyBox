@@ -319,7 +319,75 @@ window.selectNode = async function(group, name) {
   }
 };
 
+/* ------------------------------------------------------------- 概览与内核状态 */
+
+async function pollOverview() {
+  try {
+    const data = await fetchRemote('/overview');
+    if (data.kernel) {
+      const el = $('infoKernelState');
+      if (el) {
+        if (data.kernel.running) {
+          const verStr = data.kernel.versionOutput ? data.kernel.versionOutput.split('\n')[0] : '';
+          const shortVer = verStr ? ' (' + verStr.replace(/^sing-box\s+version\s+/i, 'v') + ')' : '';
+          el.textContent = `运行中${shortVer}`;
+          el.style.color = 'var(--ok)';
+        } else {
+          el.textContent = '已停止';
+          el.style.color = 'var(--danger)';
+        }
+      }
+    }
+  } catch {}
+}
+
 /* ------------------------------------------------------------- 分流策略 */
+
+function buildTargetOptionsHtml(currentTarget = '', targets = []) {
+  let matched = false;
+  let html = '';
+
+  const builtins = [
+    { val: 'all-auto', label: '所有-自动 (自动优选)' },
+    { val: 'all-manual', label: '所有-手动 (手动切换)' },
+    { val: 'builtin-direct', label: '直连 (direct - 绕过代理)' },
+    { val: 'builtin-block', label: '拒绝 (block - 阻止连接)' },
+  ];
+
+  html += '<optgroup label="内置目标">';
+  for (const b of builtins) {
+    const isSel = (!matched) && (
+      b.val === currentTarget ||
+      (b.val === 'all-auto' && (currentTarget === '所有-自动' || currentTarget === 'all-auto')) ||
+      (b.val === 'all-manual' && (currentTarget === '所有-手动' || currentTarget === 'all-manual')) ||
+      (b.val === 'builtin-direct' && (currentTarget === 'direct' || currentTarget === 'builtin-direct')) ||
+      (b.val === 'builtin-block' && (currentTarget === 'block' || currentTarget === 'builtin-block'))
+    );
+    if (isSel) matched = true;
+    html += `<option value="${escapeHtml(b.val)}"${isSel ? ' selected' : ''}>${escapeHtml(b.label)}</option>`;
+  }
+  html += '</optgroup>';
+
+  const exclude = new Set(['all-auto', 'all-manual', 'builtin-direct', 'builtin-block', 'direct', 'block']);
+  const customTargets = (targets || []).filter(t => !exclude.has(t.value) && !exclude.has(t.label));
+
+  if (customTargets.length) {
+    html += '<optgroup label="自定义分组与出站">';
+    for (const t of customTargets) {
+      const isSel = (!matched) && (currentTarget === t.value || currentTarget === t.label);
+      if (isSel) matched = true;
+      html += `<option value="${escapeHtml(t.value)}"${isSel ? ' selected' : ''}>${escapeHtml(t.label)}</option>`;
+    }
+    html += '</optgroup>';
+  }
+
+  // 严防误判：若尚未匹配，生成当前值专属项保留原策略，绝不偷梁换柱成直连
+  if (!matched && currentTarget) {
+    html += `<optgroup label="当前配置"><option value="${escapeHtml(currentTarget)}" selected>${escapeHtml(currentTarget)}</option></optgroup>`;
+  }
+
+  return html;
+}
 
 async function loadPolicies() {
   const container = $('policyListContainer');
@@ -342,13 +410,7 @@ async function loadPolicies() {
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
           <label style="font-size:12px;color:var(--text-muted)">出口目标:</label>
           <select data-pol-idx="${i}" style="padding:4px 8px;border-radius:6px;border:1px solid var(--border);font-size:12px">
-            <option value="builtin-direct" ${p.target === 'builtin-direct' ? 'selected' : ''}>直连</option>
-            <option value="builtin-block" ${p.target === 'builtin-block' ? 'selected' : ''}>拒绝</option>
-            <option value="all-auto" ${p.target === 'all-auto' ? 'selected' : ''}>所有-自动</option>
-            <option value="all-manual" ${p.target === 'all-manual' ? 'selected' : ''}>所有-手动</option>
-            ${(targets || []).filter(t => !['builtin-direct', 'builtin-block', 'all-auto', 'all-manual'].includes(t.value)).map(t => `
-              <option value="${escapeHtml(t.value)}" ${p.target === t.value ? 'selected' : ''}>${escapeHtml(t.label)}</option>
-            `).join('')}
+            ${buildTargetOptionsHtml(p.target, targets)}
           </select>
           <span style="font-size:11px;color:var(--text-muted)">规则: ${(p.rulesets || []).concat(p.domainSuffix || []).join(', ') || '无'}</span>
         </div>
@@ -378,6 +440,18 @@ async function savePolicies() {
     await loadPolicies();
   } catch (err) {
     toast(`保存策略失败: ${err.message}`);
+  }
+}
+
+async function resetPolicies() {
+  if (!confirm('确定将所有分流策略恢复为系统官方默认？（AI、Google、流媒体走代理，国内走直连）')) return;
+  try {
+    toast('正在恢复默认分流策略并重新部署...');
+    await fetchRemote('/policies/reset', { method: 'POST' });
+    toast('已恢复默认策略！内核已重新部署生效');
+    await loadPolicies();
+  } catch (err) {
+    toast(`恢复策略失败: ${err.message}`);
   }
 }
 
@@ -537,6 +611,7 @@ function bindEvents() {
 
   $('btnReloadGroups')?.addEventListener('click', loadGroups);
   $('btnSavePoliciesLocal')?.addEventListener('click', savePolicies);
+  $('btnResetPoliciesLocal')?.addEventListener('click', resetPolicies);
 
   $('connSearchLocal')?.addEventListener('input', renderConnections);
   $('btnClearConnSearchLocal')?.addEventListener('click', () => {
@@ -568,9 +643,11 @@ function bindEvents() {
 window.addEventListener('DOMContentLoaded', async () => {
   bindEvents();
   await syncLocalStatus();
+  await pollOverview();
   await pollTraffic();
 
   // 定时刷新状态与速率
   setInterval(syncLocalStatus, 5000);
+  setInterval(pollOverview, 4000);
   setInterval(pollTraffic, 2000);
 });
