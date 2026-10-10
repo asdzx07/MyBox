@@ -40,6 +40,10 @@ export function verifyPassword(password) {
 function getSessionSecret() {
   const s = loadSettings();
   if (s.panel?.sessionSecret) return s.panel.sessionSecret;
+  return rotateSessionSecret();
+}
+
+export function rotateSessionSecret() {
   const gen = crypto.randomBytes(32).toString('hex');
   try {
     mutateSettings((sett) => {

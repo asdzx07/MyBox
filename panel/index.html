@@ -522,7 +522,47 @@
         </div>
       </div>
 
-      <!-- 核心卡片 4: 内核运行日志 -->
+      <!-- 核心卡片 4: 面板安全与管理密码修改 -->
+      <div class="card">
+        <div class="card-head">
+          <h3>面板安全设置</h3>
+          <div class="spacer"></div>
+          <span class="bdg" id="pwdStatusBadge">密码保护已启用</span>
+        </div>
+        <p class="note" style="margin:-4px 0 16px">
+          修改旁路由 MyBox 面板的管理访问密码。保存后所有已发放的历史登录凭据将立即失效。
+        </p>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:16px;max-width:800px">
+          <label class="field">
+            <span class="field-title">当前管理密码</span>
+            <input type="password" id="setCurrPassword" autocomplete="current-password" placeholder="请输入当前密码">
+            <span class="field-hint">验证当前管理员身份</span>
+          </label>
+
+          <label class="field">
+            <span class="field-title">新管理密码</span>
+            <input type="password" id="setNewPassword" autocomplete="new-password" placeholder="至少 6 位新密码">
+            <span class="field-hint">长度至少 6 位</span>
+          </label>
+
+          <label class="field">
+            <span class="field-title">确认新密码</span>
+            <input type="password" id="setConfirmPassword" autocomplete="new-password" placeholder="再次输入新密码">
+            <span class="field-hint">确保两次输入一致</span>
+          </label>
+        </div>
+
+        <div style="margin-top:16px;display:flex;align-items:center;gap:12px">
+          <button class="primary" id="btnUpdatePassword" style="min-width:110px">
+            <svg class="btn-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+            修改密码
+          </button>
+          <span class="note" id="pwdChangeHint">修改密码后将自动轮换安全密钥</span>
+        </div>
+      </div>
+
+      <!-- 核心卡片 5: 内核运行日志 -->
       <div class="card">
         <div class="card-head">
           <h3>内核运行日志</h3>

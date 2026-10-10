@@ -41,7 +41,9 @@ export function registerPublicAuthRoutes(app, deps) {
 }
 
 export function registerProtectedAuthRoutes(app, deps) {
-  const { verifyPassword, setPassword } = deps;
+  const {
+    verifyPassword, setPassword, rotateSessionSecret, issueToken, setSessionCookie,
+  } = deps;
 
   app.get('/api/auth/me', (req, res) => res.json({ authenticated: true }));
 
@@ -49,6 +51,10 @@ export function registerProtectedAuthRoutes(app, deps) {
     if (!verifyPassword(req.body?.current)) return res.status(401).json({ error: '当前密码错误' });
     try {
       setPassword(req.body?.next);
+      if (typeof rotateSessionSecret === 'function') rotateSessionSecret();
+      if (typeof setSessionCookie === 'function' && typeof issueToken === 'function') {
+        setSessionCookie(res, issueToken());
+      }
     } catch (err) {
       return res.status(400).json({ error: err.message });
     }

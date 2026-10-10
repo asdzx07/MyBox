@@ -66,6 +66,7 @@ async function withServer(overrides, run) {
     isAuthed: () => false,
     setPassword: () => {},
     verifyPassword: () => false,
+    rotateSessionSecret: () => 'rotated-secret',
     issueToken: () => 'test-token',
     clearSessionCookie: () => {},
     setSessionCookie: () => {},
@@ -224,3 +225,54 @@ test('global error handler retains 500 JSON response and adds route context to l
     assert.equal(logEntries.some((entry) => entry[0] === 'error' && entry.includes('GET') && entry.includes('/api/overview')), true);
   });
 });
+
+test('change-password route verifies current password, rotates session secret, and sets new session cookie', async () => {
+  let savedPassword = 'initial-password';
+  let secretRotated = false;
+  let issuedToken = null;
+
+  await withServer({
+    verifyPassword: (pwd) => pwd === savedPassword,
+    setPassword: (next) => {
+      if (!next || next.length < 6) throw new Error('密码至少 6 位');
+      savedPassword = next;
+    },
+    rotateSessionSecret: () => {
+      secretRotated = true;
+      return 'new-secret';
+    },
+    issueToken: () => 'token-after-rotation',
+    setSessionCookie: (_res, token) => {
+      issuedToken = token;
+    },
+  }, async ({ baseUrl }) => {
+    // 1. 错误密码拒绝
+    const badRes = await request(baseUrl, '/api/auth/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ current: 'wrong-pass', next: 'new-pass-123' }),
+    });
+    assert.equal(badRes.status, 401);
+
+    // 2. 密码太短拒绝
+    const shortRes = await request(baseUrl, '/api/auth/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ current: 'initial-password', next: '123' }),
+    });
+    assert.equal(shortRes.status, 400);
+
+    // 3. 密码正确，轮换密钥并下发新 cookie
+    const okRes = await request(baseUrl, '/api/auth/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ current: 'initial-password', next: 'new-valid-pass' }),
+    });
+    assert.equal(okRes.status, 200);
+    assert.deepEqual(await okRes.json(), { ok: true });
+    assert.equal(savedPassword, 'new-valid-pass');
+    assert.equal(secretRotated, true);
+    assert.equal(issuedToken, 'token-after-rotation');
+  });
+});
+

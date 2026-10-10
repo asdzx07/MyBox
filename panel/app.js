@@ -1754,6 +1754,50 @@ function bindEvents() {
     }
   }));
 
+  // 修改面板管理密码
+  $('btnUpdatePassword')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const curr = $('setCurrPassword')?.value || '';
+    const next = $('setNewPassword')?.value || '';
+    const confirm = $('setConfirmPassword')?.value || '';
+
+    if (!curr) {
+      toast('请输入当前管理密码');
+      $('setCurrPassword')?.focus();
+      return;
+    }
+    if (!next || next.length < 6) {
+      toast('新密码长度不能少于 6 位');
+      $('setNewPassword')?.focus();
+      return;
+    }
+    if (next !== confirm) {
+      toast('两次输入的新密码不一致，请重新确认');
+      $('setConfirmPassword')?.focus();
+      return;
+    }
+
+    btn.disabled = true;
+    const oldHtml = btn.innerHTML;
+    btn.innerHTML = '<span class="animate-spin">↻</span> 正在修改...';
+
+    try {
+      await api('/auth/change-password', {
+        method: 'POST',
+        body: { current: curr, next },
+      });
+      toast('✓ 管理密码修改成功！历史会话已全部注销');
+      if ($('setCurrPassword')) $('setCurrPassword').value = '';
+      if ($('setNewPassword')) $('setNewPassword').value = '';
+      if ($('setConfirmPassword')) $('setConfirmPassword').value = '';
+    } catch (err) {
+      toast(`密码修改失败：${err.message}`);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = oldHtml;
+    }
+  });
+
   // 立即升级面板
   $('btnSysUpdate')?.addEventListener('click', async (e) => {
     const btn = e.currentTarget;

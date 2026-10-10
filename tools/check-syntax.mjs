@@ -5,7 +5,7 @@ import fs from 'node:fs/promises';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const extensions = new Set(['.js', '.mjs']);
-const excludedDirectories = new Set(['.git', 'node_modules', 'runtime', 'data', 'bin']);
+const excludedDirectories = new Set(['.git', 'node_modules', 'runtime', 'data', 'bin', '.profile', '.edge-profile', 'build']);
 
 async function collectJavaScript(directory, files = []) {
   const entries = await fs.readdir(directory, { withFileTypes: true });

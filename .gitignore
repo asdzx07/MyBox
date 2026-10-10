@@ -9,3 +9,4 @@ etc/
 bin/
 .profile/
 .edge-profile/
+package-lock.json

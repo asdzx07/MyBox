@@ -10,7 +10,7 @@ import {
 } from './settings.mjs';
 import {
   isPasswordSet, setPassword, verifyPassword, issueToken, clearSessionCookie,
-  setSessionCookie, authMiddleware, isAuthed,
+  setSessionCookie, authMiddleware, isAuthed, rotateSessionSecret,
 } from './auth.mjs';
 import { parseSubscription, dedupeTags } from './subscription.mjs';
 import * as kernel from './kernel.mjs';
@@ -44,6 +44,7 @@ export function createServerDeps(overrides = {}) {
     isPasswordSet,
     setPassword,
     verifyPassword,
+    rotateSessionSecret,
     issueToken,
     clearSessionCookie,
     setSessionCookie,
