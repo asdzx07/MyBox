@@ -9,7 +9,10 @@ import {
 import { createLogger } from './lib/log.mjs';
 import { ensureDirs } from './lib/fsx.mjs';
 import { fetchTextLimited } from './lib/http-io.mjs';
-import { loadSettings, saveSettings, mutateSettings, newId, DEFAULT_POLICIES } from './lib/settings.mjs';
+import {
+  loadSettings, saveSettings, mutateSettings, newId, DEFAULT_POLICIES,
+  normalizeGroupInput, normalizePolicyInput,
+} from './lib/settings.mjs';
 import {
   isPasswordSet, setPassword, verifyPassword, issueToken, clearSessionCookie,
   setSessionCookie, authMiddleware, isAuthed,
@@ -135,39 +138,12 @@ app.put('/api/settings', (req, res) => {
       current[key] = { ...current[key], ...incoming[key] };
     }
   }
-  // 兼容直接通过 settings 接口保存 groups
+  // 兼容直接通过 settings 接口保存 groups / policies
   if (Array.isArray(incoming.groups)) {
-    current.groups = incoming.groups.map((g) => ({
-      id: String(g.id || newId('grp')),
-      name: String(g.name || '未命名').trim(),
-      type: String(g.type || 'selector').toLowerCase() === 'urltest' ? 'urltest' : 'selector',
-      enabled: g.enabled !== false,
-      mode: g.mode === 'dynamic' ? 'dynamic' : 'static',
-      members: Array.isArray(g.members) ? g.members.map(String) : [],
-      keywords: Array.isArray(g.keywords) ? g.keywords.map(String) : [],
-      interval: g.interval || '300s',
-      tolerance: Number(g.tolerance) || 100,
-      idleTimeout: g.idleTimeout || '12h',
-      default: g.default ? String(g.default) : undefined,
-    }));
+    current.groups = incoming.groups.map(normalizeGroupInput);
   }
-  // 兼容直接通过 settings 接口保存 policies
   if (Array.isArray(incoming.policies)) {
-    current.policies = incoming.policies.map((p) => {
-      let tgt = String(p.target || 'builtin-direct');
-      if (tgt === 'direct') tgt = 'builtin-direct';
-      if (tgt === 'block') tgt = 'builtin-block';
-      return {
-        id: String(p.id || newId('pol')),
-        name: String(p.name || '未命名').trim(),
-        enabled: p.enabled !== false,
-        rulesets: Array.isArray(p.rulesets) ? p.rulesets.map(String) : [],
-        domain: Array.isArray(p.domain) ? p.domain.map(String) : [],
-        domainSuffix: Array.isArray(p.domainSuffix) ? p.domainSuffix.map(String) : [],
-        ipCidr: Array.isArray(p.ipCidr) ? p.ipCidr.map(String) : [],
-        target: tgt,
-      };
-    });
+    current.policies = incoming.policies.map(normalizePolicyInput);
   }
   saveSettings(current);
   res.json(sanitize(current));
@@ -362,19 +338,7 @@ app.get('/api/groups', (req, res) => {
 app.put('/api/groups', async (req, res) => {
   const list = req.body?.groups;
   if (!Array.isArray(list)) return res.status(400).json({ error: 'groups 必须是数组' });
-  const clean = list.map((g) => ({
-    id: String(g.id || newId('grp')),
-    name: String(g.name || '未命名').trim(),
-    type: String(g.type || 'selector').toLowerCase() === 'urltest' ? 'urltest' : 'selector',
-    enabled: g.enabled !== false,
-    mode: g.mode === 'dynamic' ? 'dynamic' : 'static',
-    members: Array.isArray(g.members) ? g.members.map(String) : [],
-    keywords: Array.isArray(g.keywords) ? g.keywords.map(String) : [],
-    interval: g.interval || '300s',
-    tolerance: Number(g.tolerance) || 100,
-    idleTimeout: g.idleTimeout || '12h',
-    default: g.default ? String(g.default) : undefined,
-  }));
+  const clean = list.map(normalizeGroupInput);
   if (clean.some((g) => !g.name)) return res.status(400).json({ error: '分组名不能为空' });
   mutateSettings((s) => {
     s.groups = clean;
@@ -415,21 +379,7 @@ app.get('/api/policies', (req, res) => {
 app.put('/api/policies', async (req, res) => {
   const list = req.body?.policies;
   if (!Array.isArray(list)) return res.status(400).json({ error: 'policies 必须是数组' });
-  const clean = list.map((p) => {
-    let tgt = String(p.target || 'builtin-direct');
-    if (tgt === 'direct') tgt = 'builtin-direct';
-    if (tgt === 'block') tgt = 'builtin-block';
-    return {
-      id: String(p.id || newId('pol')),
-      name: String(p.name || '未命名').trim(),
-      enabled: p.enabled !== false,
-      rulesets: Array.isArray(p.rulesets) ? p.rulesets.map(String) : [],
-      domain: Array.isArray(p.domain) ? p.domain.map(String) : [],
-      domainSuffix: Array.isArray(p.domainSuffix) ? p.domainSuffix.map(String) : [],
-      ipCidr: Array.isArray(p.ipCidr) ? p.ipCidr.map(String) : [],
-      target: tgt,
-    };
-  });
+  const clean = list.map(normalizePolicyInput);
   if (clean.some((p) => !p.name)) return res.status(400).json({ error: '策略名不能为空' });
   mutateSettings((s) => {
     s.policies = clean;

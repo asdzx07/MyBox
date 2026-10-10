@@ -114,6 +114,40 @@ export function defaultSettings() {
   };
 }
 
+/** 统一 HTTP 设置与分组资源入口的分组字段归一化。 */
+export function normalizeGroupInput(g) {
+  return {
+    id: String(g.id || newId('grp')),
+    name: String(g.name || '未命名').trim(),
+    type: String(g.type || 'selector').toLowerCase() === 'urltest' ? 'urltest' : 'selector',
+    enabled: g.enabled !== false,
+    mode: g.mode === 'dynamic' ? 'dynamic' : 'static',
+    members: Array.isArray(g.members) ? g.members.map(String) : [],
+    keywords: Array.isArray(g.keywords) ? g.keywords.map(String) : [],
+    interval: g.interval || '300s',
+    tolerance: Number(g.tolerance) || 100,
+    idleTimeout: g.idleTimeout || '12h',
+    default: g.default ? String(g.default) : undefined,
+  };
+}
+
+/** 统一 HTTP 设置与策略资源入口的策略字段归一化。 */
+export function normalizePolicyInput(p) {
+  let target = String(p.target || 'builtin-direct');
+  if (target === 'direct') target = 'builtin-direct';
+  if (target === 'block') target = 'builtin-block';
+  return {
+    id: String(p.id || newId('pol')),
+    name: String(p.name || '未命名').trim(),
+    enabled: p.enabled !== false,
+    rulesets: Array.isArray(p.rulesets) ? p.rulesets.map(String) : [],
+    domain: Array.isArray(p.domain) ? p.domain.map(String) : [],
+    domainSuffix: Array.isArray(p.domainSuffix) ? p.domainSuffix.map(String) : [],
+    ipCidr: Array.isArray(p.ipCidr) ? p.ipCidr.map(String) : [],
+    target,
+  };
+}
+
 /** 深合并：只补默认值里缺失的键，不覆盖用户已有的值。 */
 function mergeDefaults(target, defaults) {
   if (Array.isArray(defaults)) return Array.isArray(target) ? target : defaults;
