@@ -204,8 +204,8 @@ app.post('/api/subscriptions', async (req, res) => {
   }
 });
 
-/** 启用 / 停用一条订阅。停用后它的节点不进配置，要重新部署才生效。 */
-app.put('/api/subscriptions/:id', (req, res) => {
+/** 启用 / 停用一条订阅。停用后它的节点不进配置，自动部署生效。 */
+app.put('/api/subscriptions/:id', async (req, res) => {
   const enabled = req.body?.enabled !== false;
   let found = false;
   mutateSettings((s) => {
@@ -216,15 +216,26 @@ app.put('/api/subscriptions/:id', (req, res) => {
     }
   });
   if (!found) return res.status(404).json({ error: '订阅不存在' });
-  log.info('订阅 %s 已%s', req.params.id, enabled ? '启用' : '停用');
+  try {
+    await deploy.deploy({ restart: true });
+  } catch (depErr) {
+    log.warn('切换订阅后自动部署告警：%s', depErr.message);
+  }
+  log.info('订阅 %s 已%s 并已部署生效', req.params.id, enabled ? '启用' : '停用');
   res.json({ ok: true, id: req.params.id, enabled });
 });
 
-app.delete('/api/subscriptions/:id', (req, res) => {
+app.delete('/api/subscriptions/:id', async (req, res) => {
   mutateSettings((s) => {
     s.subscriptions = s.subscriptions.filter((x) => x.id !== req.params.id);
     s.nodes = s.nodes.filter((n) => n.__subscriptionId !== req.params.id);
   });
+  try {
+    await deploy.deploy({ restart: true });
+  } catch (depErr) {
+    log.warn('删除订阅后自动部署告警：%s', depErr.message);
+  }
+  log.info('订阅 %s 已删除并已部署生效', req.params.id);
   res.json({ ok: true });
 });
 

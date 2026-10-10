@@ -153,6 +153,7 @@
             <div style="display:flex;gap:8px;align-items:center">
               <button class="small-btn primary" id="btnTestLatencyAll" title="一键测试当前所有节点的真实握手延迟">⚡ 延迟测试</button>
               <button class="small-btn" id="btnOpenSubModal" title="直接添加订阅并推送到旁路由 Web 端">＋ 添加订阅</button>
+              <button class="small-btn" id="btnGoToSubsPage" title="跳转到订阅管理页面进行删除、切换或刷新">管理订阅 ↗</button>
               <button class="small-btn" id="btnReloadGroups">刷新节点</button>
             </div>
           </div>
@@ -162,33 +163,36 @@
         </div>
       </section>
 
-      <!-- 订阅管理 (直推 Web 端) -->
+      <!-- 订阅管理 (完全对齐 Web 端) -->
       <section class="view-section" id="sec-subs">
-        <div class="panel-box">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
-            <div>
-              <h3>订阅管理 (推送至 Web 端)</h3>
-              <p class="sub-tip">在 Windows 客户端添加订阅，将直接推送至旁路由并自动热部署生效。</p>
+        <h2 style="font-size:18px;font-weight:700;margin-bottom:16px;color:#0f172a">订阅管理</h2>
+
+        <!-- 卡片 1：添加订阅 -->
+        <div class="panel-box" style="margin-bottom:16px;padding:20px;border-radius:14px;background:#fff;border:1px solid var(--border)">
+          <h3 style="margin:0 0 14px 0;font-size:15px;font-weight:600;color:#1e293b">添加订阅</h3>
+          <div style="display:flex;gap:14px;align-items:flex-end;margin-bottom:10px;flex-wrap:wrap">
+            <div style="flex:1 1 180px">
+              <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:6px">名称</label>
+              <input type="text" id="inlineSubName" class="text-input" placeholder="例如：极速机场主线">
             </div>
-            <div style="display:flex;gap:8px">
-              <button class="small-btn primary" id="btnOpenAddSubViewModal">＋ 添加新订阅</button>
-              <button class="small-btn" id="btnRefreshAllSubs">全部刷新</button>
+            <div style="flex:2 1 280px">
+              <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:6px">订阅地址</label>
+              <input type="text" id="inlineSubUrl" class="text-input" placeholder="https://...">
+            </div>
+            <div style="flex-shrink:0">
+              <button class="small-btn primary" id="btnInlineAddSub" style="height:36px;padding:0 22px;font-size:13px;border-radius:8px">添加并拉取</button>
             </div>
           </div>
+          <div style="font-size:12px;color:var(--text-muted)">支持 sing-box JSON、Clash YAML、base64 分享链接。</div>
+        </div>
 
-          <!-- 快捷添加表单 -->
-          <div class="sub-card-box" style="margin-bottom:16px;padding:16px;border:1px solid var(--border);border-radius:12px;background:#fff">
-            <div style="font-weight:600;font-size:13px;margin-bottom:10px">快速添加订阅</div>
-            <div style="display:flex;flex-direction:column;gap:10px">
-              <input type="text" id="inlineSubName" class="text-input" placeholder="订阅名称 (例如: 我的主力机场，可选)">
-              <div style="display:flex;gap:8px">
-                <input type="text" id="inlineSubUrl" class="text-input" style="flex:1" placeholder="订阅链接 (URL 例如: https://...)">
-                <button class="small-btn primary" id="btnInlineAddSub" style="white-space:nowrap;padding:0 18px">推送到 Web 端</button>
-              </div>
-            </div>
+        <!-- 卡片 2：已有订阅 -->
+        <div class="panel-box" style="padding:20px;border-radius:14px;background:#fff;border:1px solid var(--border)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <h3 style="margin:0;font-size:15px;font-weight:600;color:#1e293b">已有订阅</h3>
+            <button class="small-btn" id="btnRefreshAllSubs" style="font-size:12px;padding:5px 12px">全部刷新</button>
           </div>
-
-          <div id="subsListContainer" class="sub-list-stack">
+          <div id="subsListContainer" class="sub-list-container">
             <p class="empty-tip">正在加载订阅列表...</p>
           </div>
         </div>
