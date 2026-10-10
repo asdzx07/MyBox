@@ -740,11 +740,9 @@ window.addEventListener('DOMContentLoaded', async () => {
   setInterval(pollTraffic, 2000);
 });
 
-// 窗口关闭时自动通知后台断开并恢复网络
+// 窗口关闭时自动通知后台断开网络并退出服务
 window.addEventListener('beforeunload', () => {
-  if (localState.connected) {
-    try {
-      navigator.sendBeacon('/api/local/disconnect');
-    } catch {}
-  }
+  try {
+    navigator.sendBeacon('/api/local/exit');
+  } catch {}
 });
