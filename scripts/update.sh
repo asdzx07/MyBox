@@ -13,10 +13,13 @@ ROOT=/opt/mybox
 USE_MIRROR=0
 SRC_DIR=""
 
+TOKEN="${GITHUB_TOKEN:-}"
+
 while [ $# -gt 0 ]; do
   case "$1" in
     --mirror) USE_MIRROR=1; shift ;;
     --src) SRC_DIR="$2"; shift 2 ;;
+    --token) TOKEN="$2"; shift 2 ;;
     *) echo "未知参数：$1" >&2; exit 1 ;;
   esac
 done
@@ -37,18 +40,30 @@ else
   say "下载最新源码"
   TMP=$(mktemp -d)
   TARBALL="$TMP/mybox.tar.gz"
-  URL="https://github.com/$REPO/archive/refs/heads/$BRANCH.tar.gz"
   ok=0
-  if [ "$USE_MIRROR" = "1" ]; then
-    for m in $MIRRORS; do
-      if curl -fsSL "$m/$URL" -o "$TARBALL" 2>/dev/null; then ok=1; break; fi
-    done
+
+  if [ -n "$TOKEN" ]; then
+    say "检测到 GitHub Token，使用认证 API 下载源码"
+    API_URL="https://api.github.com/repos/$REPO/tarball/$BRANCH"
+    if curl -fsSL -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" "$API_URL" -o "$TARBALL"; then
+      ok=1
+    fi
+  else
+    URL="https://github.com/$REPO/archive/refs/heads/$BRANCH.tar.gz"
+    if [ "$USE_MIRROR" = "1" ]; then
+      for m in $MIRRORS; do
+        if curl -fsSL "$m/$URL" -o "$TARBALL" 2>/dev/null; then ok=1; break; fi
+      done
+    fi
+    if [ "$ok" = "0" ]; then
+      curl -fsSL "$URL" -o "$TARBALL" 2>/dev/null && ok=1 || true
+    fi
   fi
-  if [ "$ok" = "0" ]; then
-    curl -fsSL "$URL" -o "$TARBALL" || die "下载源码失败"
-  fi
+
+  [ "$ok" = "1" ] || die "下载源码失败（若是私有仓库，请传 --token <TOKEN> 或设置 GITHUB_TOKEN 环境变量）"
+
   tar -xzf "$TARBALL" -C "$TMP"
-  SRCDIR=$(find "$TMP" -maxdepth 1 -type d -name "mybox-*" | head -n 1)
+  SRCDIR=$(find "$TMP" -maxdepth 1 -type d -name "*mybox*" | head -n 1)
   [ -n "$SRCDIR" ] || die "解包后找不到源码目录"
 fi
 
@@ -73,7 +88,9 @@ cp "$SRCDIR/package.json" "$ROOT/"
 
 # 记录当前 Commit 短 hash 至 data/commit.sha
 mkdir -p "$ROOT/data"
-COMMIT=$(curl -fsSL "https://api.github.com/repos/$REPO/commits/$BRANCH" 2>/dev/null | grep -o '"sha": "[a-f0-9]*"' | head -1 | cut -d'"' -f4 | cut -c1-7)
+AUTH_HDR=""
+[ -n "$TOKEN" ] && AUTH_HDR="Authorization: Bearer $TOKEN"
+COMMIT=$(curl -fsSL ${AUTH_HDR:+-H "$AUTH_HDR"} "https://api.github.com/repos/$REPO/commits/$BRANCH" 2>/dev/null | grep -o '"sha": "[a-f0-9]*"' | head -1 | cut -d'"' -f4 | cut -c1-7 || true)
 [ -n "$COMMIT" ] && echo "$COMMIT" > "$ROOT/data/commit.sha"
 
 say "更新依赖"
