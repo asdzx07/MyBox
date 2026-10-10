@@ -176,7 +176,7 @@ app.put('/api/settings', (req, res) => {
 /* --------------------------------------------------------------- 订阅 */
 
 app.get('/api/subscriptions', (req, res) => {
-  const { subscriptions, nodes } = loadSettings({ force: true });
+  const { subscriptions, nodes } = loadSettings();
   res.json({
     subscriptions: subscriptions.map((s) => {
       const subNodes = nodes.filter((n) => n.__subscriptionId === s.id);
@@ -337,7 +337,7 @@ async function refreshSubscription(id) {
 }
 
 app.get('/api/nodes', (req, res) => {
-  const { nodes, subscriptions } = loadSettings({ force: true });
+  const { nodes, subscriptions } = loadSettings();
   const subById = new Map(subscriptions.map((s) => [s.id, s]));
   res.json({
     nodes: nodes.map(({ __subscriptionId, ...rest }) => {
@@ -355,7 +355,7 @@ app.get('/api/nodes', (req, res) => {
 /* --------------------------------------------------------------- 分组 */
 
 app.get('/api/groups', (req, res) => {
-  const { groups, nodes } = loadSettings({ force: true });
+  const { groups, nodes } = loadSettings();
   res.json({ groups, availableNodes: nodes.map((n) => n.tag) });
 });
 
@@ -391,7 +391,7 @@ app.put('/api/groups', async (req, res) => {
 /* --------------------------------------------------------------- 策略 */
 
 app.get('/api/policies', (req, res) => {
-  const { policies, groups } = loadSettings({ force: true });
+  const { policies, groups } = loadSettings();
 
   // 策略里存的是分组 id（改名不会失效），面板显示的是分组名称，这里对齐一下：
   // 返回的 target 统一成 id，前端拿 label 显示。
