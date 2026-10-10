@@ -35,33 +35,51 @@ function saveConfig(next) {
   } catch {}
 }
 
-async function loginRemoteGateway(password = config.password) {
-  if (!password) return false;
+async function loginRemoteGateway(password = config.password, gatewayIp = config.gatewayIp) {
+  if (!password) return { ok: false, error: '密码不能为空' };
   return new Promise((resolve) => {
     const postData = JSON.stringify({ password });
-    const req = http.request(`http://${config.gatewayIp}:${config.gatewayPort}/api/auth/login`, {
+    const req = http.request(`http://${gatewayIp}:${config.gatewayPort}/api/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(postData),
       },
-      timeout: 4000,
+      timeout: 5000,
     }, (res) => {
-      const setCookies = res.headers['set-cookie'];
-      if (setCookies) {
-        const found = setCookies.find(c => c.includes('mybox_session='));
-        if (found) {
-          const cookieVal = found.split(';')[0].trim();
-          config.sessionCookie = cookieVal;
-          saveConfig({ sessionCookie: cookieVal });
-          console.log('[MyBox Windows Companion] 旁路由登录成功，已获取会话 Cookie');
-          resolve(true);
-          return;
+      let respBody = '';
+      res.on('data', c => { respBody += c; });
+      res.on('end', () => {
+        if (res.statusCode === 200) {
+          const setCookies = res.headers['set-cookie'];
+          if (setCookies) {
+            const found = setCookies.find(c => c.includes('mybox_session='));
+            if (found) {
+              const cookieVal = found.split(';')[0].trim();
+              config.sessionCookie = cookieVal;
+              config.password = password;
+              saveConfig({ password, sessionCookie: cookieVal });
+              console.log('[MyBox Windows Companion] 旁路由登录成功，已获取并保存会话 Cookie');
+              resolve({ ok: true, message: '登录成功' });
+              return;
+            }
+          }
+          resolve({ ok: true });
+        } else if (res.statusCode === 401) {
+          resolve({ ok: false, error: '密码错误，请检查旁路由管理密码' });
+        } else if (res.statusCode === 409) {
+          resolve({ ok: true, noPassword: true, message: '旁路由无需密码' });
+        } else {
+          try {
+            const parsed = JSON.parse(respBody);
+            resolve({ ok: false, error: parsed.error || `HTTP ${res.statusCode}` });
+          } catch {
+            resolve({ ok: false, error: `旁路由返回错误 HTTP ${res.statusCode}` });
+          }
         }
-      }
-      resolve(false);
+      });
     });
-    req.on('error', () => resolve(false));
+    req.on('error', (err) => resolve({ ok: false, error: `连接旁路由失败 (${err.message})` }));
     req.write(postData);
     req.end();
   });
@@ -115,9 +133,47 @@ const server = http.createServer(async (req, res) => {
       gatewayPort: config.gatewayPort,
       autoConnect: config.autoConnect,
       hasPassword: Boolean(config.password),
+      password: config.password || '',
+      hasSession: Boolean(config.sessionCookie),
       latency,
       interface: iface,
     }));
+    return;
+  }
+
+  // 旁路由 IP 与管理密码保存并直连认证
+  if (pathname === '/api/local/auth' && req.method === 'POST') {
+    let bodyStr = '';
+    req.on('data', chunk => { bodyStr += chunk; });
+    req.on('end', async () => {
+      try {
+        const body = JSON.parse(bodyStr || '{}');
+        if (body.gatewayIp) {
+          config.gatewayIp = body.gatewayIp.trim();
+          saveConfig({ gatewayIp: config.gatewayIp });
+        }
+        if (body.gatewayPort) {
+          config.gatewayPort = Number(body.gatewayPort) || 3036;
+          saveConfig({ gatewayPort: config.gatewayPort });
+        }
+        const pwd = (body.password !== undefined) ? body.password.trim() : config.password;
+        if (!pwd) {
+          // 清空保存的密码与会话
+          config.password = '';
+          config.sessionCookie = '';
+          saveConfig({ password: '', sessionCookie: '' });
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, message: '已保存为免密模式', hasSession: false }));
+          return;
+        }
+        const authRes = await loginRemoteGateway(pwd, config.gatewayIp);
+        res.writeHead(authRes.ok ? 200 : 400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ...authRes, config }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: err.message }));
+      }
+    });
     return;
   }
 
