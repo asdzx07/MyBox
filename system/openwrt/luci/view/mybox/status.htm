@@ -1,6 +1,12 @@
 <%+header%>
 <h2>MyBox 服务状态</h2>
-<p>在这里启停 MyBox 服务。正常情况请用主面板。</p>
+<p style="display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 10px 0 16px 0;">
+  <span>存放单内核 MyBox 服务。正常情况请使用主面板。</span>
+  <a id="btn-open-panel" href="javascript:void(0)" target="_blank" class="cbi-button cbi-button-apply" style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 14px; text-decoration: none; font-weight: bold; font-size: 13px; line-height: 1.5; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.12);">
+    <span>🌐 打开主面板</span>
+    <span style="font-size: 11px; opacity: 0.85;">↗</span>
+  </a>
+</p>
 
 <div class="cbi-section">
   <table class="table">
@@ -10,6 +16,7 @@
       <td id="st-panel">…</td>
       <td id="ver-panel">…</td>
       <td>
+        <button class="btn btn-primary" onclick="openPanel()">打开</button>
         <button class="btn" onclick="svc('panel','start')">启动</button>
         <button class="btn" onclick="svc('panel','stop')">停止</button>
         <button class="btn" onclick="svc('panel','restart')">重启</button>
@@ -30,6 +37,22 @@
 </div>
 
 <script>
+let panelPort = '3036';
+
+function updatePanelUrl(port) {
+  panelPort = port || panelPort;
+  const url = 'http://' + window.location.hostname + ':' + panelPort;
+  const btn = document.getElementById('btn-open-panel');
+  if (btn) btn.href = url;
+}
+
+function openPanel() {
+  window.open('http://' + window.location.hostname + ':' + panelPort, '_blank');
+}
+
+// 页面初次加载时立即初始化默认地址
+updatePanelUrl('3036');
+
 function load() {
   fetch('<%=url("admin/services/mybox/status")%>')
     .then(r => r.json())
@@ -38,6 +61,7 @@ function load() {
       document.getElementById('st-kernel').textContent = d.kernel;
       document.getElementById('ver-panel').textContent = d.panel_version || '—';
       document.getElementById('ver-kernel').textContent = d.kernel_version || '—';
+      if (d.port) updatePanelUrl(d.port);
     })
     .catch(() => alert('获取状态失败'));
 }

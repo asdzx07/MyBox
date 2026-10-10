@@ -20,12 +20,15 @@ function action_status()
   local kernel = sh("/etc/init.d/mybox-kernel status 2>/dev/null | grep -q running && echo running || echo stopped")
   local kver = sh("/opt/mybox/bin/sing-box version 2>/dev/null | head -1")
   local pver = sh("cat /opt/mybox/VERSION 2>/dev/null")
+  local port = sh("cat /opt/mybox/data/port 2>/dev/null")
+  if port == "" or not port:match("^%d+$") then port = "3036" end
   luci.http.prepare_content("application/json")
   luci.http.write_json({
     panel = panel,
     kernel = kernel,
     kernel_version = kver,
     panel_version = pver,
+    port = port,
   })
 end
 
