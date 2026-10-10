@@ -745,7 +745,7 @@ async function savePolicies() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ policies: remoteData.policies }),
     });
-    toast('策略已保存并已部署生效！');
+    toast('策略配置已保存；如内核未应用，请查看服务端日志');
     await loadPolicies();
   } catch (err) {
     toast(`保存策略失败: ${err.message}`);

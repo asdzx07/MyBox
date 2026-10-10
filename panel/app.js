@@ -1405,7 +1405,7 @@ function bindEvents() {
     renderGroups();
     // 联动刷新策略下拉框中的分组列表
     if (state.policies?.length) renderPolicies();
-    toast('分组已保存并已部署生效（内核已应用）');
+    toast('分组配置已保存；如内核未应用，请查看服务端日志');
   }));
 
   $('groupList')?.addEventListener('input', (e) => {
@@ -1557,7 +1557,7 @@ function bindEvents() {
     const res = await api('/policies', { method: 'PUT', body: { policies: state.policies } });
     if (res?.policies) state.policies = res.policies;
     renderPolicies();
-    toast('策略已保存并已部署生效（内核已应用）');
+    toast('策略配置已保存；如内核未应用，请查看服务端日志');
   }));
 
   $('btnAddPolicy').addEventListener('click', () => {

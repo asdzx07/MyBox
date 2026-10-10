@@ -203,7 +203,7 @@ app.post('/api/subscriptions', async (req, res) => {
     try {
       await deploy.deploy({ restart: true });
     } catch (depErr) {
-      log.warn('添加订阅后自动部署告警：%s', depErr.message);
+      log.warn('订阅已保存并拉取，但内核部署未完成；运行配置可能仍是旧版本：%s', depErr.message);
     }
     res.json({ id, ...result });
   } catch (err) {
@@ -225,10 +225,10 @@ app.put('/api/subscriptions/:id', async (req, res) => {
   if (!found) return res.status(404).json({ error: '订阅不存在' });
   try {
     await deploy.deploy({ restart: true });
+    log.info('订阅 %s 已%s 并已部署生效', req.params.id, enabled ? '启用' : '停用');
   } catch (depErr) {
-    log.warn('切换订阅后自动部署告警：%s', depErr.message);
+    log.warn('订阅 %s 已保存为%s，但内核部署未完成；运行配置可能仍是旧版本：%s', req.params.id, enabled ? '启用' : '停用', depErr.message);
   }
-  log.info('订阅 %s 已%s 并已部署生效', req.params.id, enabled ? '启用' : '停用');
   res.json({ ok: true, id: req.params.id, enabled });
 });
 
@@ -239,10 +239,10 @@ app.delete('/api/subscriptions/:id', async (req, res) => {
   });
   try {
     await deploy.deploy({ restart: true });
+    log.info('订阅 %s 已删除并已部署生效', req.params.id);
   } catch (depErr) {
-    log.warn('删除订阅后自动部署告警：%s', depErr.message);
+    log.warn('订阅 %s 已删除，但内核部署未完成；运行配置可能仍是旧版本：%s', req.params.id, depErr.message);
   }
-  log.info('订阅 %s 已删除并已部署生效', req.params.id);
   res.json({ ok: true });
 });
 
@@ -383,7 +383,7 @@ app.put('/api/groups', async (req, res) => {
     await deploy.deploy({ restart: true });
     log.info('分组配置保存并已部署生效');
   } catch (err) {
-    log.warn('分组保存后部署警告：%s', err.message);
+    log.warn('分组配置已保存，但内核部署未完成；运行配置可能仍是旧版本：%s', err.message);
   }
   res.json({ ok: true, groups: clean });
 });
@@ -435,13 +435,17 @@ app.put('/api/policies', async (req, res) => {
     s.policies = clean;
   });
   for (const p of clean) {
-    try { setFlip(p.id, p.enabled); } catch {}
+    try {
+      setFlip(p.id, p.enabled);
+    } catch (err) {
+      log.warn('写入策略 %s 的热切换状态失败：%s', p.id, err.message);
+    }
   }
   try {
     await deploy.deploy({ restart: true });
     log.info('策略配置保存并已部署生效');
   } catch (err) {
-    log.warn('策略保存后部署警告：%s', err.message);
+    log.warn('策略配置已保存，但内核部署未完成；运行配置可能仍是旧版本：%s', err.message);
   }
   res.json({ ok: true, policies: clean });
 });
@@ -459,12 +463,16 @@ app.post('/api/policies/reset', async (req, res) => {
     s.policies = next;
   });
   for (const p of next) {
-    try { setFlip(p.id, p.enabled); } catch {}
+    try {
+      setFlip(p.id, p.enabled);
+    } catch (err) {
+      log.warn('写入策略 %s 的热切换状态失败：%s', p.id, err.message);
+    }
   }
   try {
     await deploy.deploy({ restart: true });
   } catch (err) {
-    log.warn('重置策略后部署警告：%s', err.message);
+    log.warn('默认策略已保存，但内核部署未完成；运行配置可能仍是旧版本：%s', err.message);
   }
   res.json({ ok: true, policies: next });
 });
@@ -953,7 +961,7 @@ app.use('/api/controller', async (req, res) => {
 /* ------------------------------------------------------------ 错误兜底 */
 
 app.use((err, req, res, _next) => {
-  log.error('%s', err.message);
+  log.error('%s %s：%s', req.method, req.path, err.message);
   res.status(500).json({ error: err.message });
 });
 
