@@ -333,18 +333,24 @@ async function loadGroups() {
   try {
     const data = await fetchRemote('/nodes/status');
     remoteData.groups = data.groups || [];
+    const nodeTypeMap = new Map();
+    (data.nodes || []).forEach(n => nodeTypeMap.set(n.name, n.type));
+    (data.groups || []).forEach(grp => nodeTypeMap.set(grp.name, grp.type));
+    nodeTypeMap.set('DIRECT', 'Direct');
+    nodeTypeMap.set('REJECT', 'Reject');
+
     if (!remoteData.groups.length) {
       container.innerHTML = '<p class="empty-tip">暂无可用代理分组</p>';
       return;
     }
     container.innerHTML = remoteData.groups.map(g => `
       <div class="group-card-item">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
           <div>
-            <strong style="font-size:14px">${g.name}</strong>
-            <span style="font-size:12px;color:var(--text-muted);margin-left:8px">当前: <span style="color:var(--accent);font-weight:600">${g.now || '—'}</span></span>
+            <strong style="font-size:14px">${escapeHtml(g.name)}</strong>
+            <span style="font-size:12px;color:var(--text-muted);margin-left:8px">当前: <span style="color:var(--accent);font-weight:600">${escapeHtml(g.now || '—')}</span></span>
           </div>
-          <span style="font-size:11px;background:#f3f4f6;padding:3px 8px;border-radius:6px">${g.type}</span>
+          <span style="font-size:11px;background:#f3f4f6;padding:3px 8px;border-radius:6px;font-weight:500">${escapeHtml(g.type)}</span>
         </div>
         <div class="node-pill-grid">
           ${(g.members || []).map(m => {
@@ -357,21 +363,26 @@ async function loadGroups() {
                 latClass = 'testing';
               } else if (lat.delay !== null && lat.delay !== undefined) {
                 const ms = lat.delay;
-                latText = `${ms} ms`;
-                if (ms < 120) latClass = 'fast';
-                else if (ms < 280) latClass = 'medium';
+                latText = `${ms}ms`;
+                if (ms < 150) latClass = 'fast';
+                else if (ms < 350) latClass = 'medium';
                 else latClass = 'slow';
               } else {
                 latText = '超时';
                 latClass = 'error';
               }
             }
+            const proto = nodeTypeMap.get(m) || '';
+            const isActive = m === g.now;
             return `
-              <div class="node-pill ${m === g.now ? 'active' : ''}" onclick="selectNode('${escapeHtml(g.name)}', '${escapeHtml(m)}')">
-                <span class="node-name-text" title="${escapeHtml(m)}">${escapeHtml(m)}</span>
-                <div class="node-pill-right">
-                  <span class="latency-badge ${latClass}" title="点击单独测试此节点延迟" onclick="event.stopPropagation(); testSingleLatency('${escapeHtml(m)}')">${latText}</span>
-                  ${m === g.now ? '<span style="font-size:11px;font-weight:bold">✓</span>' : ''}
+              <div class="node-pill ${isActive ? 'active' : ''}" onclick="selectNode('${escapeHtml(g.name)}', '${escapeHtml(m)}')">
+                <div class="node-pill-top">
+                  <span class="node-name-text" title="${escapeHtml(m)}">${escapeHtml(m)}</span>
+                  <span class="latency-badge ${latClass}" title="点击单独测试延迟" onclick="event.stopPropagation(); testSingleLatency('${escapeHtml(m)}')">${latText}</span>
+                </div>
+                <div class="node-pill-bottom">
+                  <span class="node-proto-tag">${escapeHtml(proto)}</span>
+                  ${isActive ? '<span class="node-check-ic">✓</span>' : ''}
                 </div>
               </div>
             `;
@@ -881,6 +892,21 @@ async function exitApplication() {
 
 /* ------------------------------------------------------------- 选项卡与事件绑定 */
 
+let localConnPollTimer = null;
+
+function startLocalConnPoll() {
+  stopLocalConnPoll();
+  loadConnections();
+  localConnPollTimer = setInterval(loadConnections, 1500);
+}
+
+function stopLocalConnPoll() {
+  if (localConnPollTimer) {
+    clearInterval(localConnPollTimer);
+    localConnPollTimer = null;
+  }
+}
+
 function switchTab(name) {
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
@@ -897,7 +923,11 @@ function switchTab(name) {
   if (name === 'groups') loadGroups();
   if (name === 'subs') loadSubs();
   if (name === 'routing') loadPolicies();
-  if (name === 'conns') loadConnections();
+  if (name === 'conns') {
+    startLocalConnPoll();
+  } else {
+    stopLocalConnPoll();
+  }
 }
 
 function escapeHtml(str) {
@@ -948,10 +978,8 @@ function bindEvents() {
   $('btnResetPoliciesLocal')?.addEventListener('click', resetPolicies);
 
   $('connSearchLocal')?.addEventListener('input', renderConnections);
-  $('btnClearConnSearchLocal')?.addEventListener('click', () => {
-    $('connSearchLocal').value = '';
-    renderConnections();
-  });
+  $('connSearchLocal')?.addEventListener('search', renderConnections);
+  $('btnClearConnSearchLocal')?.addEventListener('click', closeAllConnections);
   $('btnCloseAllConnsLocal')?.addEventListener('click', closeAllConnections);
   $('btnReloadConnsLocal')?.addEventListener('click', loadConnections);
 

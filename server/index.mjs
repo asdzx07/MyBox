@@ -767,7 +767,7 @@ app.get('/api/nodes/latency', async (req, res) => {
   const name = req.query.name;
   if (!name) return res.status(400).json({ error: '缺少 name' });
   const url = req.query.url || 'http://www.gstatic.com/generate_204';
-  const timeout = Number(req.query.timeout) || 5000;
+  const timeout = Math.min(Math.max(Number(req.query.timeout) || 2800, 1000), 10000);
   try {
     const r = await clashApi(
       `/proxies/${encodeURIComponent(name)}/delay?url=${encodeURIComponent(url)}&timeout=${timeout}`,
@@ -779,22 +779,38 @@ app.get('/api/nodes/latency', async (req, res) => {
   }
 });
 
-/** 一次性测一批节点（串行，避免同时打太多连接）。 */
+/** 一次性测一批节点（受控并发池，8~10 并发，极速完成测速同时避免打爆连接）。 */
 app.post('/api/nodes/latency/batch', async (req, res) => {
   const names = Array.isArray(req.body?.names) ? req.body.names.slice(0, 200) : [];
   const url = req.body?.url || 'http://www.gstatic.com/generate_204';
-  const timeout = Number(req.body?.timeout) || 5000;
+  const timeout = Math.min(Math.max(Number(req.body?.timeout) || 2800, 1000), 10000);
   const results = {};
-  for (const name of names) {
-    try {
-      const r = await clashApi(
-        `/proxies/${encodeURIComponent(name)}/delay?url=${encodeURIComponent(url)}&timeout=${timeout}`,
-      );
-      results[name] = { delay: r?.delay ?? null, error: null };
-    } catch (err) {
-      results[name] = { delay: null, error: err.message.replace(/^.*内核返回 /, '') };
+
+  if (!names.length) {
+    return res.json({ results });
+  }
+
+  const concurrency = Math.min(10, names.length);
+  let cursor = 0;
+
+  async function worker() {
+    while (cursor < names.length) {
+      const idx = cursor++;
+      const name = names[idx];
+      try {
+        const r = await clashApi(
+          `/proxies/${encodeURIComponent(name)}/delay?url=${encodeURIComponent(url)}&timeout=${timeout}`,
+        );
+        results[name] = { delay: r?.delay ?? null, error: null };
+      } catch (err) {
+        results[name] = { delay: null, error: err.message.replace(/^.*内核返回 /, '') };
+      }
     }
   }
+
+  const workers = Array.from({ length: concurrency }, () => worker());
+  await Promise.all(workers);
+
   res.json({ results });
 });
 

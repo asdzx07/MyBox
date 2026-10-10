@@ -43,28 +43,28 @@
         <span class="nav-text">节点分组</span>
       </button>
 
-      <!-- 3. 目标分流 -->
+      <!-- 3. 订阅管理 (移到节点分组下方) -->
+      <button data-tab="subscriptions">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7 12 12l8.7-5M12 22V12"/></svg></span>
+        <span class="nav-text">订阅管理</span>
+      </button>
+
+      <!-- 4. 目标分流 -->
       <button data-tab="policies">
         <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span>
         <span class="nav-text">目标分流</span>
       </button>
 
-      <!-- 4. 当前连接 -->
+      <!-- 5. 当前连接 -->
       <button data-tab="connections">
         <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>
         <span class="nav-text">当前连接</span>
       </button>
 
-      <!-- 5. 内网分流 -->
+      <!-- 6. 内网分流 -->
       <button data-tab="clients">
         <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
         <span class="nav-text">内网分流</span>
-      </button>
-
-      <!-- 6. 订阅管理 -->
-      <button data-tab="subscriptions">
-        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7 12 12l8.7-5M12 22V12"/></svg></span>
-        <span class="nav-text">订阅管理</span>
       </button>
 
       <!-- 7. 核心设置 -->
@@ -230,8 +230,8 @@
       <div class="card">
         <div class="card-head" style="flex-wrap:wrap;gap:10px">
           <div style="display:flex;align-items:center;gap:6px;flex:1 1 260px">
-            <input type="text" id="connSearch" placeholder="搜索连接 (域名/IP/规则/链路)..." style="font-size:12px;padding:5px 10px;height:32px;flex:1;max-width:320px">
-            <button class="small" id="btnClearConnSearch" style="height:32px;padding:0 10px">清空</button>
+            <input type="search" id="connSearch" placeholder="搜索连接 (域名/IP/规则/链路)..." style="font-size:12px;padding:5px 10px;height:32px;flex:1;max-width:320px">
+            <button class="small danger" id="btnClearConnSearch" style="height:32px;padding:0 12px" title="清空并断开当前所有活动连接">清空所有连接</button>
           </div>
           <div class="spacer"></div>
           <span class="note" id="connPageCount"></span>

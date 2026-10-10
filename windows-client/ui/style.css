@@ -470,29 +470,6 @@ header.top-header {
   margin-top: 10px;
 }
 
-.node-pill {
-  padding: 7px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: #fff;
-  font-size: 12px;
-  cursor: pointer;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  transition: all 0.15s;
-}
-
-.node-pill:hover {
-  border-color: #a1a1aa;
-}
-
-.node-pill.active {
-  background: #18181b;
-  color: #fff;
-  border-color: #18181b;
-}
-
 /* 连接项 */
 .conn-row {
   display: flex;
@@ -681,97 +658,107 @@ header.top-header {
 
 .node-pill {
   padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: #fff;
-  font-size: 12px;
+  border-radius: 9px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
   cursor: pointer;
   display: flex;
+  flex-direction: column;
   justify-content: space-between;
-  align-items: center;
-  transition: all 0.15s;
+  gap: 4px;
+  min-height: 52px;
+  box-sizing: border-box;
+  transition: all 0.15s ease-in-out;
   user-select: none;
 }
 
 .node-pill:hover {
-  border-color: #a1a1aa;
+  border-color: #cbd5e1;
+  background: #f8fafc;
 }
 
+/* 参照 sing-box 官方客户端设计：浅灰底色 + 深黑细描边，彻底告别沉重黑底 */
 .node-pill.active {
-  background: #18181b;
-  color: #fff;
-  border-color: #18181b;
+  background: #e4e7eb;
+  border: 1.5px solid #1e293b;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.node-pill-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  gap: 6px;
 }
 
 .node-name-text {
-  flex: 1;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #1e293b;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-right: 8px;
+  flex: 1;
 }
 
-.node-pill-right {
+.node-pill.active .node-name-text {
+  color: #0f172a;
+}
+
+.node-pill-bottom {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
+  width: 100%;
+}
+
+.node-proto-tag {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.node-pill.active .node-proto-tag {
+  color: #475569;
+}
+
+.node-check-ic {
+  font-size: 11px;
+  font-weight: 800;
+  color: #0f172a;
 }
 
 .latency-badge {
-  font-size: 10.5px;
+  font-size: 11px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  padding: 2px 6px;
-  border-radius: 4px;
   font-weight: 600;
-  background: #f4f4f5;
   color: #71717a;
-  transition: background 0.15s, color 0.15s;
-}
-
-.node-pill.active .latency-badge {
-  background: rgba(255, 255, 255, 0.2);
-  color: #fff;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  flex-shrink: 0;
+  transition: color 0.15s;
 }
 
 .latency-badge.fast {
-  background: #ecfdf5;
   color: #059669;
-}
-.node-pill.active .latency-badge.fast {
-  background: #059669;
-  color: #fff;
 }
 
 .latency-badge.medium {
-  background: #eff6ff;
   color: #2563eb;
-}
-.node-pill.active .latency-badge.medium {
-  background: #2563eb;
-  color: #fff;
 }
 
 .latency-badge.slow {
-  background: #fffbeb;
   color: #d97706;
-}
-.node-pill.active .latency-badge.slow {
-  background: #d97706;
-  color: #fff;
 }
 
 .latency-badge.error {
-  background: #fef2f2;
   color: #dc2626;
-}
-.node-pill.active .latency-badge.error {
-  background: #dc2626;
-  color: #fff;
 }
 
 .latency-badge.testing {
-  background: #f3f4f6;
   color: #9ca3af;
   animation: pulse 1s infinite alternate;
 }

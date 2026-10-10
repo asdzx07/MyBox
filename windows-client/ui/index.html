@@ -220,11 +220,10 @@
         <div class="panel-box">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
             <div style="display:flex;align-items:center;gap:8px;flex:1 1 240px">
-              <input type="text" id="connSearchLocal" placeholder="搜索连接 (域名/IP/规则/链路)..." class="search-input">
-              <button class="small-btn" id="btnClearConnSearchLocal">清空</button>
+              <input type="search" id="connSearchLocal" placeholder="搜索连接 (域名/IP/规则/链路)..." class="search-input">
+              <button class="small-btn danger" id="btnClearConnSearchLocal" title="清空并断开当前所有活动连接">清空所有连接</button>
             </div>
             <div style="display:flex;align-items:center;gap:8px">
-              <button class="small-btn danger" id="btnCloseAllConnsLocal">清空连接</button>
               <button class="small-btn" id="btnReloadConnsLocal">刷新</button>
             </div>
           </div>
