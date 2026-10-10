@@ -43,11 +43,11 @@ export function getActiveInterface() {
 }
 
 /**
- * 检查当前是否已通过旁路由接管路由
+ * 检查当前是否已通过旁路由作为默认网关
  */
 export function isConnectedToGateway(gatewayIp = '192.168.3.2') {
   try {
-    const out = execSync(`route print 0.0.0.0`, { encoding: 'utf8' });
+    const out = execSync(`powershell -NoProfile -Command "(Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway }).IPv4DefaultGateway.NextHop"`, { encoding: 'utf8' });
     return out.includes(gatewayIp);
   } catch {
     return false;
@@ -55,56 +55,53 @@ export function isConnectedToGateway(gatewayIp = '192.168.3.2') {
 }
 
 /**
- * 连接旁路由：使用工业级双 /1 路由(0.0.0.0/1 + 128.0.0.0/1)最长前缀匹配接管全量流量，并将 DNS 指向旁路由
+ * 连接旁路由：自动读取当前 IP，将网卡默认网关直接指向 192.168.3.2，DNS 设为 192.168.3.2 与 223.5.5.5
  */
 export function connectGateway(gatewayIp = '192.168.3.2') {
   const iface = getActiveInterface();
-  const ifIndex = iface.index || 19;
+  const alias = iface.alias || '以太网';
+  const ip = iface.ip || '192.168.3.25';
 
-  // 1. 先安全清理旧的可能存在的该网关路由
-  try { execSync(`route delete 0.0.0.0 mask 128.0.0.0 ${gatewayIp}`, { stdio: 'ignore' }); } catch {}
-  try { execSync(`route delete 128.0.0.0 mask 128.0.0.0 ${gatewayIp}`, { stdio: 'ignore' }); } catch {}
-  try { execSync(`route delete 0.0.0.0 ${gatewayIp}`, { stdio: 'ignore' }); } catch {}
-
-  // 2. 添加最长前缀匹配的双 /1 路由，严格且必定优先于主路由 0.0.0.0/0
   try {
-    execSync(`route add 0.0.0.0 mask 128.0.0.0 ${gatewayIp} metric 1 if ${ifIndex}`, { stdio: 'pipe' });
-    execSync(`route add 128.0.0.0 mask 128.0.0.0 ${gatewayIp} metric 1 if ${ifIndex}`, { stdio: 'pipe' });
-  } catch (err) {
-    throw new Error(`添加接管路由失败(请确保以管理员身份运行): ${err.message}`);
-  }
+    // 1. 设置网卡静态网关为旁路由 (保留当前 IP 与子网掩码不变)
+    execSync(`netsh interface ip set address name="${alias}" static ${ip} 255.255.255.0 ${gatewayIp} 1`, { stdio: 'pipe' });
 
-  // 3. 将 DNS 切换为旁路由 IP 并清空缓存
-  try {
-    const dnsCmd = `Set-DnsClientServerAddress -InterfaceIndex ${ifIndex} -ServerAddresses ("${gatewayIp}")`;
-    execSync(`powershell -NoProfile -Command "${dnsCmd}"`, { stdio: 'pipe' });
+    // 2. 设置首选 DNS 为旁路由，备选 DNS 为公共 DNS 223.5.5.5
+    execSync(`netsh interface ip set dns name="${alias}" static ${gatewayIp}`, { stdio: 'pipe' });
+    try {
+      execSync(`netsh interface ip add dns name="${alias}" 223.5.5.5 index=2`, { stdio: 'ignore' });
+    } catch {}
+
+    // 3. 刷新系统 DNS 缓存
     execSync('ipconfig /flushdns', { stdio: 'ignore' });
   } catch (err) {
-    console.warn('DNS 设置警告:', err.message);
+    throw new Error(`切换网关与 DNS 失败(请确保以管理员权限运行): ${err.message}`);
   }
 
-  return { ok: true, connected: true, gateway: gatewayIp, interface: iface.alias || ifIndex };
+  return { ok: true, connected: true, gateway: gatewayIp, interface: alias, ip };
 }
 
 /**
- * 断开旁路由：删除双 /1 路由并将 DNS 恢复为 DHCP 自动获取
+ * 断开旁路由：一键恢复网卡为 DHCP 自动获取 IP 与自动获取 DNS (完全恢复主路由 192.168.3.1)
  */
 export function disconnectGateway(gatewayIp = '192.168.3.2') {
   const iface = getActiveInterface();
-  const ifIndex = iface.index || 19;
+  const alias = iface.alias || '以太网';
 
-  // 1. 删除双 /1 临时路由及 /0 路由
-  try { execSync(`route delete 0.0.0.0 mask 128.0.0.0 ${gatewayIp}`, { stdio: 'ignore' }); } catch {}
-  try { execSync(`route delete 128.0.0.0 mask 128.0.0.0 ${gatewayIp}`, { stdio: 'ignore' }); } catch {}
-  try { execSync(`route delete 0.0.0.0 ${gatewayIp}`, { stdio: 'ignore' }); } catch {}
-
-  // 2. 恢复 DNS 为自动获取 (DHCP)
   try {
-    const dnsCmd = `Set-DnsClientServerAddress -InterfaceIndex ${ifIndex} -ResetServerAddresses`;
-    execSync(`powershell -NoProfile -Command "${dnsCmd}"`, { stdio: 'pipe' });
+    // 1. 恢复网卡 IP 与网关为 DHCP 自动获取
+    execSync(`netsh interface ip set address name="${alias}" source=dhcp`, { stdio: 'pipe' });
+
+    // 2. 恢复网卡 DNS 为 DHCP 自动获取
+    execSync(`netsh interface ip set dns name="${alias}" source=dhcp`, { stdio: 'pipe' });
+
+    // 3. 清理可能残留的临时路由与刷新 DNS
+    try { execSync(`route delete 0.0.0.0 mask 128.0.0.0 ${gatewayIp}`, { stdio: 'ignore' }); } catch {}
+    try { execSync(`route delete 128.0.0.0 mask 128.0.0.0 ${gatewayIp}`, { stdio: 'ignore' }); } catch {}
+    try { execSync(`route delete 0.0.0.0 ${gatewayIp}`, { stdio: 'ignore' }); } catch {}
     execSync('ipconfig /flushdns', { stdio: 'ignore' });
   } catch (err) {
-    console.warn('恢复 DNS 警告:', err.message);
+    console.warn('恢复 DHCP 警告:', err.message);
   }
 
   return { ok: true, connected: false, gateway: gatewayIp };
