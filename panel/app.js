@@ -540,6 +540,8 @@ function renderConnections() {
   }).join('')}</div>`;
 }
 
+let connAutoPollTimer = null;
+
 async function loadConnectionsPage() {
   const listEl = $('connsList');
   try {
@@ -552,6 +554,19 @@ async function loadConnectionsPage() {
     renderConnections();
   } catch (err) {
     if (listEl) listEl.innerHTML = `<p class="err-text" style="padding:16px 0">${escapeHtml(err.message)}</p>`;
+  }
+}
+
+function startConnAutoPoll() {
+  stopConnAutoPoll();
+  loadConnectionsPage();
+  connAutoPollTimer = setInterval(loadConnectionsPage, 1500);
+}
+
+function stopConnAutoPoll() {
+  if (connAutoPollTimer) {
+    clearInterval(connAutoPollTimer);
+    connAutoPollTimer = null;
   }
 }
 
@@ -1212,7 +1227,11 @@ function bindEvents() {
       document.querySelectorAll('section.page').forEach((p) => p.classList.toggle('active', p.id === `page-${tab}`));
 
       if (tab === 'nodes') { await loadNodes(); await loadGroups(); }
-      if (tab === 'connections') await loadConnectionsPage();
+      if (tab === 'connections') {
+        startConnAutoPoll();
+      } else {
+        stopConnAutoPoll();
+      }
       if (tab === 'clients') loadClients();
       if (tab === 'subscriptions') await loadSubscriptions();
       if (tab === 'policies') {
@@ -1399,14 +1418,8 @@ function bindEvents() {
   $('btnConnsRefresh')?.addEventListener('click', (e) => withBusy(e.currentTarget, loadConnectionsPage));
   $('btnCloseAllConns')?.addEventListener('click', closeAllConnections);
   $('connSearch')?.addEventListener('input', renderConnections);
-  $('btnClearConnSearch')?.addEventListener('click', () => {
-    const input = $('connSearch');
-    if (input) {
-      input.value = '';
-      input.focus();
-    }
-    renderConnections();
-  });
+  $('connSearch')?.addEventListener('search', renderConnections);
+  $('btnClearConnSearch')?.addEventListener('click', closeAllConnections);
 
   // 订阅页
   $('btnAddSub').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
