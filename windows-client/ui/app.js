@@ -2,6 +2,10 @@ let localState = {
   connected: false,
   gatewayIp: '192.168.3.2',
   gatewayPort: 3036,
+  password: '',
+  hasPassword: false,
+  hasSession: false,
+  authed: true,
   latency: null,
   activeInterface: {},
 };
@@ -29,7 +33,7 @@ function toast(msg) {
   el.textContent = msg;
   el.classList.remove('hidden');
   clearTimeout(el._t);
-  el._t = setTimeout(() => el.classList.add('hidden'), 2600);
+  el._t = setTimeout(() => el.classList.add('hidden'), 2800);
 }
 
 function fmtBytes(bytes) {
@@ -55,74 +59,94 @@ async function fetchRemote(path, options = {}) {
   try {
     const res = await fetch(`/remote-api${path}`, options);
     if (res.status === 401) {
-      showAuthModal();
+      localState.authed = false;
+      renderAuthBadge();
       throw new Error('unauthorized');
     }
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || `HTTP ${res.status}`);
     }
+    localState.authed = true;
+    renderAuthBadge();
     return await res.json();
   } catch (err) {
     if (err.message === 'unauthorized') {
-      showAuthModal();
+      localState.authed = false;
+      renderAuthBadge();
     }
     console.warn(`请求远程 API 失败 [${path}]:`, err.message);
     throw err;
   }
 }
 
-/* ------------------------------------------------------------- 身份认证模态框 */
+/* ------------------------------------------------------------- 旁路由直连认证与保存 */
 
-function showAuthModal() {
-  const modal = $('authModal');
-  if (!modal) return;
-  modal.classList.remove('hidden');
-  const errEl = $('authModalError');
-  if (errEl) errEl.classList.add('hidden');
-  setTimeout(() => $('authModalPassword')?.focus(), 80);
-}
-
-function hideAuthModal() {
-  const modal = $('authModal');
-  if (modal) modal.classList.add('hidden');
-}
-
-async function doLogin(password) {
-  if (!password) {
-    toast('请输入管理密码');
-    return false;
-  }
-  try {
-    toast('正在验证密码并登录旁路由...');
-    const res = await fetch('/remote-api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.ok) {
-      throw new Error(data.error || '密码错误');
+function focusPasswordInput() {
+  switchTab('overview');
+  setTimeout(() => {
+    const pwdEl = $('quickGwPassword');
+    if (pwdEl) {
+      pwdEl.focus();
+      pwdEl.select();
     }
-    // 登录成功，同步给本地服务持久化保存
-    await fetchLocal('/api/local/config', {
+  }, 100);
+}
+
+function renderAuthBadge() {
+  const badge = $('quickAuthBadge');
+  if (!badge) return;
+  if (!localState.hasPassword && !localState.hasSession && localState.authed) {
+    badge.className = 'auth-pill-badge guest';
+    badge.textContent = '免密直连';
+  } else if (localState.authed && (localState.hasSession || localState.hasPassword)) {
+    badge.className = 'auth-pill-badge authed';
+    badge.textContent = '已认证';
+  } else {
+    badge.className = 'auth-pill-badge unauthed';
+    badge.textContent = '需输入密码';
+  }
+}
+
+async function saveAndAuth(ip, password) {
+  ip = (ip || '').trim() || localState.gatewayIp || '192.168.3.2';
+  password = (password !== undefined ? password : '').trim();
+
+  try {
+    toast(`正在连接旁路由 (${ip}) 验证配置...`);
+    const res = await fetchLocal('/api/local/auth', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ gatewayIp: ip, password }),
     });
-    hideAuthModal();
-    toast('认证成功！节点已同步就绪');
-    await loadGroups();
-    await loadPolicies();
-    await loadConnections();
+
+    if (!res.ok) {
+      localState.authed = false;
+      renderAuthBadge();
+      toast(`登录失败: ${res.error || '密码错误，请检查旁路由管理密码'}`);
+      return false;
+    }
+
+    localState.gatewayIp = ip;
+    localState.password = password;
+    localState.hasPassword = Boolean(password);
+    localState.hasSession = Boolean(res.hasSession !== false);
+    localState.authed = true;
+
+    renderAuthBadge();
+    toast(password ? '旁路由认证成功！已同步节点与策略' : '已保存旁路由 IP 配置');
+
+    // 重新同步并加载业务数据
+    await syncLocalStatus();
+    await pollOverview();
+    if ($('sec-groups')?.classList.contains('active')) loadGroups();
+    if ($('sec-routing')?.classList.contains('active')) loadPolicies();
+    if ($('sec-conns')?.classList.contains('active')) loadConnections();
     return true;
   } catch (err) {
-    const errEl = $('authModalError');
-    if (errEl) {
-      errEl.textContent = `登录失败: ${err.message}`;
-      errEl.classList.remove('hidden');
-    }
-    toast(`登录失败: ${err.message}`);
+    localState.authed = false;
+    renderAuthBadge();
+    toast(`连接失败: ${err.message}`);
     return false;
   }
 }
@@ -138,6 +162,10 @@ async function syncLocalStatus() {
       localState.gatewayPort = data.gatewayPort;
       localState.latency = data.latency;
       localState.activeInterface = data.interface || {};
+      localState.hasPassword = !!data.hasPassword;
+      localState.hasSession = !!data.hasSession;
+      if (data.password !== undefined) localState.password = data.password;
+
       if ($('cfgAutoConnect') && data.autoConnect !== undefined) {
         $('cfgAutoConnect').checked = !!data.autoConnect;
       }
@@ -161,9 +189,17 @@ function renderStatusUI() {
   if ($('quickGwIp') && document.activeElement !== $('quickGwIp')) {
     $('quickGwIp').value = curIp;
   }
+  if ($('quickGwPassword') && document.activeElement !== $('quickGwPassword')) {
+    $('quickGwPassword').value = localState.password || '';
+  }
   if ($('cfgGatewayIp') && document.activeElement !== $('cfgGatewayIp')) {
     $('cfgGatewayIp').value = curIp;
   }
+  if ($('cfgPanelPassword') && document.activeElement !== $('cfgPanelPassword')) {
+    $('cfgPanelPassword').value = localState.password || '';
+  }
+
+  renderAuthBadge();
 
   $('infoLocalIp').textContent = localState.activeInterface?.ip ? `${localState.activeInterface.ip} (网卡: ${localState.activeInterface.alias || '以太网'})` : '192.168.3.x';
   $('infoPing').textContent = localState.latency !== null ? `${localState.latency} ms` : '超时或离线';
@@ -205,27 +241,10 @@ function renderStatusUI() {
   }
 }
 
-async function saveQuickIp() {
+async function handleQuickSaveAuth() {
   const ip = $('quickGwIp')?.value?.trim();
-  if (!ip) {
-    toast('请输入有效的旁路由 IP 地址');
-    return;
-  }
-  try {
-    toast(`正在保存旁路由 IP: ${ip}...`);
-    await fetchLocal('/api/local/config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ gatewayIp: ip }),
-    });
-    localState.gatewayIp = ip;
-    if ($('cfgGatewayIp')) $('cfgGatewayIp').value = ip;
-    toast(`旁路由 IP 已更新为 ${ip}`);
-    await syncLocalStatus();
-    await pollOverview();
-  } catch (err) {
-    toast(`保存旁路由 IP 失败: ${err.message}`);
-  }
+  const pwd = $('quickGwPassword')?.value ?? '';
+  await saveAndAuth(ip, pwd);
 }
 
 async function toggleGateway() {
@@ -332,9 +351,11 @@ async function loadGroups() {
   } catch (err) {
     if (err.message === 'unauthorized') {
       container.innerHTML = `
-        <div style="text-align:center;padding:30px 10px">
-          <p style="font-size:13.5px;color:#4b5563;margin-bottom:12px">旁路由已开启访问密码保护，请先验证密码</p>
-          <button class="small-btn primary" onclick="showAuthModal()" style="padding:7px 18px">输入密码解锁节点</button>
+        <div class="unauth-tip-card">
+          <div class="unauth-icon">🔒</div>
+          <div class="unauth-title">旁路由已开启密码访问保护</div>
+          <div class="unauth-desc">请在首页【仪表】中输入旁路由管理密码并点击“连接/保存”，即可自动拉取节点。</div>
+          <button class="small-btn primary" onclick="focusPasswordInput()" style="padding:6px 18px">前往输入密码</button>
         </div>
       `;
     } else {
@@ -456,7 +477,18 @@ async function loadPolicies() {
       </div>
     `).join('');
   } catch (err) {
-    container.innerHTML = `<p class="empty-tip" style="color:var(--danger)">加载策略失败: ${err.message}</p>`;
+    if (err.message === 'unauthorized') {
+      container.innerHTML = `
+        <div class="unauth-tip-card">
+          <div class="unauth-icon">🔒</div>
+          <div class="unauth-title">旁路由已开启密码访问保护</div>
+          <div class="unauth-desc">请在首页【仪表】中输入旁路由管理密码并点击“连接/保存”，即可配置分流策略。</div>
+          <button class="small-btn primary" onclick="focusPasswordInput()" style="padding:6px 18px">前往输入密码</button>
+        </div>
+      `;
+    } else {
+      container.innerHTML = `<p class="empty-tip" style="color:var(--danger)">加载策略失败: ${err.message}</p>`;
+    }
   }
 }
 
@@ -503,7 +535,18 @@ async function loadConnections() {
     remoteData.connections = data.connections || [];
     renderConnections();
   } catch (err) {
-    container.innerHTML = `<p class="empty-tip" style="color:var(--danger)">加载连接失败: ${err.message}</p>`;
+    if (err.message === 'unauthorized') {
+      container.innerHTML = `
+        <div class="unauth-tip-card">
+          <div class="unauth-icon">🔒</div>
+          <div class="unauth-title">旁路由已开启密码访问保护</div>
+          <div class="unauth-desc">请在首页【仪表】中输入旁路由管理密码并点击“连接/保存”，即可查看实时网络连接。</div>
+          <button class="small-btn primary" onclick="focusPasswordInput()" style="padding:6px 18px">前往输入密码</button>
+        </div>
+      `;
+    } else {
+      container.innerHTML = `<p class="empty-tip" style="color:var(--danger)">加载连接失败: ${err.message}</p>`;
+    }
   }
 }
 
@@ -562,18 +605,17 @@ async function closeAllConnections() {
 async function saveClientConfig() {
   const ip = $('cfgGatewayIp').value.trim();
   const port = Number($('cfgGatewayPort').value) || 3036;
+  const pwd = $('cfgPanelPassword').value || '';
   const autoConnect = !!$('cfgAutoConnect').checked;
+
   try {
+    toast('正在保存配置并验证旁路由连接...');
     await fetchLocal('/api/local/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gatewayIp: ip, gatewayPort: port, autoConnect }),
     });
-    localState.gatewayIp = ip;
-    localState.gatewayPort = port;
-    if ($('quickGwIp')) $('quickGwIp').value = ip;
-    toast('配置已保存！正在重新同步状态...');
-    await syncLocalStatus();
+    await saveAndAuth(ip, pwd);
   } catch (err) {
     toast(`保存配置失败: ${err.message}`);
   }
@@ -643,10 +685,13 @@ function bindEvents() {
   $('topCapsule')?.addEventListener('click', toggleGateway);
   $('btnToggleGw')?.addEventListener('click', toggleGateway);
 
-  // 快捷保存旁路由 IP
-  $('btnQuickSaveIp')?.addEventListener('click', saveQuickIp);
+  // 首页状态卡片旁路由 IP 与密码保存认证
+  $('btnQuickSaveAuth')?.addEventListener('click', handleQuickSaveAuth);
   $('quickGwIp')?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') saveQuickIp();
+    if (e.key === 'Enter') handleQuickSaveAuth();
+  });
+  $('quickGwPassword')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') handleQuickSaveAuth();
   });
 
   $('btnRefreshAll')?.addEventListener('click', () => {
@@ -668,21 +713,10 @@ function bindEvents() {
   $('btnReloadConnsLocal')?.addEventListener('click', loadConnections);
 
   $('btnSaveConfigLocal')?.addEventListener('click', saveClientConfig);
+  $('btnVerifyPassword')?.addEventListener('click', saveClientConfig);
   $('btnOpenWebPanel')?.addEventListener('click', openWebPanel);
   $('btnResetWinNet')?.addEventListener('click', resetWindowsNetwork);
   $('btnExitApp')?.addEventListener('click', exitApplication);
-
-  // 认证弹窗与密码事件
-  $('btnSubmitAuth')?.addEventListener('click', () => {
-    doLogin($('authModalPassword').value.trim());
-  });
-  $('authModalPassword')?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') doLogin($('authModalPassword').value.trim());
-  });
-  $('btnCancelAuth')?.addEventListener('click', hideAuthModal);
-  $('btnVerifyPassword')?.addEventListener('click', () => {
-    doLogin($('cfgPanelPassword').value.trim());
-  });
 }
 
 // 初始化

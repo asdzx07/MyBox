@@ -600,6 +600,73 @@ header.top-header {
   margin-top: 6px;
 }
 
+/* 认证状态微章 */
+.auth-pill-badge {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.auth-pill-badge.authed {
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--ok);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+.auth-pill-badge.unauthed {
+  background: rgba(245, 158, 11, 0.12);
+  color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+.auth-pill-badge.guest {
+  background: var(--bg);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.mini-btn.primary-mini {
+  background: #111;
+  color: #fff;
+  border-color: #111;
+  font-weight: 500;
+}
+.mini-btn.primary-mini:hover {
+  background: #333;
+}
+
+/* 未认证引导卡片 */
+.unauth-tip-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 48px 20px;
+  background: var(--card-bg);
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  margin: 16px 0;
+}
+.unauth-tip-card .unauth-icon {
+  font-size: 32px;
+  margin-bottom: 12px;
+}
+.unauth-tip-card .unauth-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--text-main);
+}
+.unauth-tip-card .unauth-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  max-width: 420px;
+  margin-bottom: 18px;
+  line-height: 1.5;
+}
+
 .auth-error-hint.hidden {
   display: none;
 }
