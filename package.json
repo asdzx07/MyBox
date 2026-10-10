@@ -17,7 +17,7 @@
     "start": "node server/index.mjs",
     "dev": "MYBOX_ROOT=./runtime node server/index.mjs",
     "check": "node tools/check-syntax.mjs",
-    "test": "node --test tools/regression-safety.test.mjs tools/io-regression.test.mjs tools/connection-poll.test.mjs tools/windows-network.test.mjs tools/configgen-subscription.test.mjs tools/settings-normalization.test.mjs tools/update-transaction.test.mjs tools/windows-project.test.mjs"
+    "test": "node --test tools/regression-safety.test.mjs tools/io-regression.test.mjs tools/connection-poll.test.mjs tools/windows-network.test.mjs tools/configgen-subscription.test.mjs tools/settings-normalization.test.mjs tools/update-transaction.test.mjs tools/windows-project.test.mjs tools/server-routes.test.mjs"
   },
   "dependencies": {
     "express": "^5.1.0",
