@@ -567,19 +567,39 @@ function renderConnections() {
 }
 
 let connAutoPollTimer = null;
+let connLoadPromise = null;
+let connPollGeneration = 0;
+
+function isConnectionsPageVisible() {
+  return !document.hidden && $('page-connections')?.classList.contains('active');
+}
 
 async function loadConnectionsPage() {
+  if (connLoadPromise) return connLoadPromise;
+  if (!isConnectionsPageVisible()) return;
+
+  const generation = connPollGeneration;
   const listEl = $('connsList');
+  const request = (async () => {
+    try {
+      const data = await api('/connections');
+      if (generation !== connPollGeneration || !isConnectionsPageVisible()) return;
+      connCache = {
+        connections: data.connections || [],
+        uploadTotal: data.uploadTotal || 0,
+        downloadTotal: data.downloadTotal || 0,
+      };
+      renderConnections();
+    } catch (err) {
+      if (generation !== connPollGeneration || !isConnectionsPageVisible()) return;
+      if (listEl) listEl.innerHTML = `<p class="err-text" style="padding:16px 0">${escapeHtml(err.message)}</p>`;
+    }
+  })();
+  connLoadPromise = request;
   try {
-    const data = await api('/connections');
-    connCache = {
-      connections: data.connections || [],
-      uploadTotal: data.uploadTotal || 0,
-      downloadTotal: data.downloadTotal || 0,
-    };
-    renderConnections();
-  } catch (err) {
-    if (listEl) listEl.innerHTML = `<p class="err-text" style="padding:16px 0">${escapeHtml(err.message)}</p>`;
+    await request;
+  } finally {
+    if (connLoadPromise === request) connLoadPromise = null;
   }
 }
 
@@ -590,6 +610,7 @@ function startConnAutoPoll() {
 }
 
 function stopConnAutoPoll() {
+  connPollGeneration += 1;
   if (connAutoPollTimer) {
     clearInterval(connAutoPollTimer);
     connAutoPollTimer = null;
