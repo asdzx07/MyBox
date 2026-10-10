@@ -171,6 +171,10 @@ async function syncLocalStatus() {
       if ($('cfgAutoConnect') && data.autoConnect !== undefined) {
         $('cfgAutoConnect').checked = !!data.autoConnect;
       }
+      if ($('cfgMinimizeToTray') && data.minimizeToTray !== undefined) {
+        $('cfgMinimizeToTray').checked = !!data.minimizeToTray;
+      }
+      localState.minimizeToTray = data.minimizeToTray !== false;
       renderStatusUI();
     }
   } catch (err) {
@@ -605,19 +609,23 @@ async function closeAllConnections() {
 
 /* ------------------------------------------------------------- 设置 */
 
+let isExplicitExit = false;
+
 async function saveClientConfig() {
   const ip = $('cfgGatewayIp').value.trim();
   const port = Number($('cfgGatewayPort').value) || 3036;
   const pwd = $('cfgPanelPassword').value || '';
   const autoConnect = !!$('cfgAutoConnect').checked;
+  const minimizeToTray = $('cfgMinimizeToTray') ? !!$('cfgMinimizeToTray').checked : true;
 
   try {
     toast('正在保存配置并验证旁路由连接...');
     await fetchLocal('/api/local/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ gatewayIp: ip, gatewayPort: port, autoConnect }),
+      body: JSON.stringify({ gatewayIp: ip, gatewayPort: port, autoConnect, minimizeToTray }),
     });
+    localState.minimizeToTray = minimizeToTray;
     await saveAndAuth(ip, pwd);
   } catch (err) {
     toast(`保存配置失败: ${err.message}`);
@@ -642,7 +650,8 @@ async function resetWindowsNetwork() {
 }
 
 async function exitApplication() {
-  if (!confirm('确定退出客户端？退出时将自动恢复 Windows 默认网络直连。')) return;
+  if (!confirm('确定彻底退出客户端？退出时将自动恢复 Windows 默认网络直连。')) return;
+  isExplicitExit = true;
   try {
     toast('正在还原网络并退出服务...');
     await fetchLocal('/api/local/exit', { method: 'POST' });
@@ -715,6 +724,19 @@ function bindEvents() {
   $('btnCloseAllConnsLocal')?.addEventListener('click', closeAllConnections);
   $('btnReloadConnsLocal')?.addEventListener('click', loadConnections);
 
+  $('cfgMinimizeToTray')?.addEventListener('change', async () => {
+    const minimizeToTray = !!$('cfgMinimizeToTray').checked;
+    localState.minimizeToTray = minimizeToTray;
+    try {
+      await fetchLocal('/api/local/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ minimizeToTray }),
+      });
+      toast(minimizeToTray ? '已开启：关闭窗口时最小化到系统托盘' : '已关闭：关闭窗口时直接退出客户端');
+    } catch {}
+  });
+
   $('btnSaveConfigLocal')?.addEventListener('click', saveClientConfig);
   $('btnVerifyPassword')?.addEventListener('click', saveClientConfig);
   $('btnOpenWebPanel')?.addEventListener('click', openWebPanel);
@@ -740,9 +762,12 @@ window.addEventListener('DOMContentLoaded', async () => {
   setInterval(pollTraffic, 2000);
 });
 
-// 窗口关闭时自动通知后台断开网络并退出服务
+// 窗口关闭事件处理
 window.addEventListener('beforeunload', () => {
-  try {
-    navigator.sendBeacon('/api/local/exit');
-  } catch {}
+  // 仅在明确点击退出或用户禁用了“最小化到托盘”时，关闭窗口才通知后台退出并还原网络
+  if (isExplicitExit || localState.minimizeToTray === false) {
+    try {
+      navigator.sendBeacon('/api/local/exit');
+    } catch {}
+  }
 });

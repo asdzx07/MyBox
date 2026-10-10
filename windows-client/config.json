@@ -1,7 +1,8 @@
 {
   "gatewayIp": "192.168.3.2",
   "gatewayPort": 3036,
-  "password": "",
-  "sessionCookie": "",
-  "autoConnect": false
+  "password": "07102311Lj",
+  "sessionCookie": "mybox_session=1792205993628.3209c925325a93be1aee34fd82f7728c04e41a73eb8e234adfcbfe14b80ad51c",
+  "autoConnect": false,
+  "minimizeToTray": true
 }
