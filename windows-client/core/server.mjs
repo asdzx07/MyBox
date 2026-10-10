@@ -82,18 +82,25 @@ let lastHeartbeat = Date.now();
 let clientConnected = false;
 
 setInterval(() => {
-  if (clientConnected && Date.now() - lastHeartbeat > 8000) {
+  if (clientConnected && Date.now() - lastHeartbeat > 12000) {
     console.log('[MyBox Windows Companion] 检测到前端界面已关闭(心跳超时)，正在还原网络并安全退出...');
     try {
       disconnectGateway(config.gatewayIp);
     } catch {}
     process.exit(0);
   }
-}, 3000);
+}, 4000);
 
 const server = http.createServer(async (req, res) => {
   const urlObj = new URL(req.url, `http://${req.headers.host}`);
   const pathname = urlObj.pathname;
+
+  // 0. 极速健康检查接口 (供启动器快速探测，耗时 0ms)
+  if (pathname === '/api/local/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, timestamp: Date.now() }));
+    return;
+  }
 
   // 1. 本地状态与控制 API
   if (pathname === '/api/local/status' && req.method === 'GET') {
