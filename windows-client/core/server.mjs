@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  getActiveInterface, isConnectedToGateway, connectGateway, disconnectGateway, testPing
+  getActiveInterface, getGatewayStatus, isConnectedToGateway, connectGateway, disconnectGateway, testPing
 } from './network.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -125,7 +125,7 @@ const server = http.createServer(async (req, res) => {
   // 1. 本地状态与控制 API
   if (pathname === '/api/local/status' && req.method === 'GET') {
     const iface = getActiveInterface();
-    const connected = isConnectedToGateway(config.gatewayIp);
+    const connected = await getGatewayStatus(config.gatewayIp);
     const latency = testPing(config.gatewayIp);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
