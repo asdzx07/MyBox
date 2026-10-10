@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
+using System.Net.Sockets;
 using System.Threading;
 using System.Windows.Forms;
 
@@ -35,11 +36,16 @@ namespace MyBox.Client
             appMutex = new Mutex(true, "Global\\MyBox_Windows_Client_Singleton_Mutex", out createdNew);
             if (!createdNew)
             {
-                MessageBox.Show("MyBox 客户端已经在运行中。\n如需重启，请先在任务栏退出已有实例。", "MyBox 客户端", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                // 如果已有实例在运行，尝试直接呼出界面
+                string browserExe = FindBrowserExecutable();
+                if (!string.IsNullOrEmpty(browserExe))
+                {
+                    LaunchAppWindow(browserExe, false);
+                }
                 return;
             }
 
-            // 注册退出清理钩子
+            // 注册进程退出清理钩子
             AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
 
             try
@@ -48,7 +54,7 @@ namespace MyBox.Client
                 string nodeExe = FindNodeExecutable();
                 if (string.IsNullOrEmpty(nodeExe))
                 {
-                    MessageBox.Show("未检测到 Node.js 运行环境！\n请确保已安装 Node.js，或者系统 PATH 中包含 node.exe。", "启动失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show("未检测到 Node.js 运行环境！\n请确保已安装 Node.js (v18 或以上)。", "启动失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
 
@@ -60,18 +66,33 @@ namespace MyBox.Client
                     return;
                 }
 
-                // 5. 启动本地后台伴侣服务 (Node.js 端口 3038)
-                StartNodeServer(nodeExe);
-
-                // 6. 等待本地服务就绪
-                bool ready = WaitForServerReady(3038, 6000);
-                if (!ready)
+                // 5. 确保端口 3038 就绪或启动本地伴侣服务
+                bool alreadyRunning = IsServiceHealthy(3038);
+                if (!alreadyRunning)
                 {
-                    MessageBox.Show("本地伴侣服务启动超时，请检查端口 3038 是否被占用。", "服务超时", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    // 若端口有残留孤儿进程但无正常心跳，先清理
+                    if (IsPortOccupiedTcp(3038))
+                    {
+                        KillProcessOnPort(3038);
+                        Thread.Sleep(300);
+                    }
+
+                    StartNodeServer(nodeExe);
+
+                    bool ready = WaitForServerReady(3038, 8000);
+                    if (!ready)
+                    {
+                        // 启动依然未就绪时的容错：如果 TCP 端口通了也视为就绪
+                        if (!IsPortOccupiedTcp(3038))
+                        {
+                            MessageBox.Show("本地伴侣服务启动超时，请尝试在命令行运行：\nnode core/server.mjs\n排查报错原因。", "服务超时", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            return;
+                        }
+                    }
                 }
 
-                // 7. 启动原生风格的应用窗口
-                LaunchAppWindow(browserExe);
+                // 6. 启动原生风格的应用窗口并等待用户关闭
+                LaunchAppWindow(browserExe, true);
             }
             catch (Exception ex)
             {
@@ -102,7 +123,6 @@ namespace MyBox.Client
             string pf86Node = @"C:\Program Files (x86)\nodejs\node.exe";
             if (File.Exists(pf86Node)) return pf86Node;
 
-            // 搜索 PATH 环境变量
             string pathEnv = Environment.GetEnvironmentVariable("PATH");
             if (!string.IsNullOrEmpty(pathEnv))
             {
@@ -140,12 +160,6 @@ namespace MyBox.Client
 
         private static void StartNodeServer(string nodeExe)
         {
-            // 先尝试检查端口 3038 是否已有心跳
-            if (IsPortListening(3038))
-            {
-                return;
-            }
-
             string serverScript = Path.Combine(appDir, "core\\server.mjs");
             ProcessStartInfo psi = new ProcessStartInfo
             {
@@ -160,12 +174,15 @@ namespace MyBox.Client
             nodeProcess = Process.Start(psi);
         }
 
-        private static bool IsPortListening(int port)
+        // 毫秒级极速健康探测 (完全直连本机，禁用任何系统 Web 代理)
+        private static bool IsServiceHealthy(int port)
         {
             try
             {
-                HttpWebRequest req = (HttpWebRequest)WebRequest.Create("http://127.0.0.1:" + port + "/api/local/status");
-                req.Timeout = 500;
+                HttpWebRequest req = (HttpWebRequest)WebRequest.Create("http://127.0.0.1:" + port + "/api/local/health");
+                req.Proxy = null; // 关键：绝对禁止使用系统代理
+                req.Timeout = 1000;
+                req.ReadWriteTimeout = 1000;
                 using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
                 {
                     return resp.StatusCode == HttpStatusCode.OK;
@@ -177,23 +194,63 @@ namespace MyBox.Client
             }
         }
 
+        // 纯 TCP 端口物理握手 (1毫秒检测端口是否处于 Listen 状态)
+        private static bool IsPortOccupiedTcp(int port)
+        {
+            try
+            {
+                using (TcpClient client = new TcpClient())
+                {
+                    IAsyncResult ar = client.BeginConnect("127.0.0.1", port, null, null);
+                    bool success = ar.AsyncWaitHandle.WaitOne(200);
+                    if (success && client.Connected)
+                    {
+                        client.EndConnect(ar);
+                        return true;
+                    }
+                }
+            }
+            catch { }
+            return false;
+        }
+
         private static bool WaitForServerReady(int port, int timeoutMs)
         {
             int elapsed = 0;
             while (elapsed < timeoutMs)
             {
-                if (IsPortListening(port)) return true;
-                Thread.Sleep(200);
-                elapsed += 200;
+                if (IsServiceHealthy(port) || IsPortOccupiedTcp(port)) return true;
+                Thread.Sleep(150);
+                elapsed += 150;
             }
             return false;
         }
 
-        private static void LaunchAppWindow(string browserExe)
+        private static void KillProcessOnPort(int port)
+        {
+            try
+            {
+                ProcessStartInfo psi = new ProcessStartInfo
+                {
+                    FileName = "powershell",
+                    Arguments = string.Format("-NoProfile -Command \"Get-NetTCPConnection -LocalPort {0} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object {{ Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }}\"", port),
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    WindowStyle = ProcessWindowStyle.Hidden
+                };
+                using (Process p = Process.Start(psi))
+                {
+                    p.WaitForExit(2000);
+                }
+            }
+            catch { }
+        }
+
+        private static void LaunchAppWindow(string browserExe, bool waitForExit)
         {
             string profileDir = Path.Combine(appDir, ".profile");
             string appUrl = "http://127.0.0.1:3038";
-            string args = string.Format("--app=\"{0}\" --window-size=1100,740 --user-data-dir=\"{1}\" --no-first-run --no-default-browser-check", appUrl, profileDir);
+            string args = string.Format("--app=\"{0}\" --window-size=1120,760 --user-data-dir=\"{1}\" --no-first-run --no-default-browser-check", appUrl, profileDir);
 
             ProcessStartInfo psi = new ProcessStartInfo
             {
@@ -204,9 +261,8 @@ namespace MyBox.Client
             };
 
             Process browserProc = Process.Start(psi);
-            if (browserProc != null)
+            if (waitForExit && browserProc != null)
             {
-                // 等待用户关闭应用窗口
                 browserProc.WaitForExit();
             }
         }
@@ -222,13 +278,14 @@ namespace MyBox.Client
             try
             {
                 HttpWebRequest req = (HttpWebRequest)WebRequest.Create("http://127.0.0.1:3038/api/local/exit");
+                req.Proxy = null;
                 req.Method = "POST";
                 req.Timeout = 1000;
                 using (req.GetResponse()) { }
             }
             catch { }
 
-            // 2. 兜底恢复本地物理网卡为 DHCP
+            // 2. 兜底恢复所有物理网卡为 DHCP
             ResetNetworkDirectly();
 
             // 3. 杀掉后台 node 服务进程
@@ -267,7 +324,7 @@ namespace MyBox.Client
                 };
                 using (Process p = Process.Start(psi))
                 {
-                    p.WaitForExit(1500);
+                    p.WaitForExit(2000);
                 }
             }
             catch { }

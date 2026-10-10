@@ -1,24 +1,18 @@
 import os from 'node:os';
-import { execSync } from 'node:child_process';
+import { exec, execSync } from 'node:child_process';
+
+let cachedLatency = 1;
+let lastPingTime = 0;
 
 /**
- * 获取当前活动的物理 IPv4 网卡信息
+ * 0 毫秒纯内存获取物理网卡信息
  */
 export function getActiveInterface() {
   try {
-    // 1. 获取物理接口 index
-    let index = 19;
-    try {
-      const psIndex = execSync(`powershell -NoProfile -Command "& { Get-NetIPInterface -AddressFamily IPv4 | Where-Object { $_.ConnectionState -eq 'Connected' -and $_.InterfaceAlias -notmatch 'Loopback|vEthernet|Virtual|tun|tap' } | Select-Object -ExpandProperty InterfaceIndex -First 1 }"`, { encoding: 'utf8' }).trim();
-      if (psIndex && !isNaN(Number(psIndex))) {
-        index = Number(psIndex);
-      }
-    } catch {}
-
-    // 2. 利用 Node.js os.networkInterfaces 获取 IP 与网卡名
     const ifaces = os.networkInterfaces();
     let alias = '以太网';
     let ip = '192.168.3.25';
+    let index = 19;
 
     for (const [name, addrs] of Object.entries(ifaces)) {
       if (/Loopback|vEthernet|Virtual|tun|tap/i.test(name)) continue;
@@ -43,11 +37,11 @@ export function getActiveInterface() {
 }
 
 /**
- * 检查当前是否已通过旁路由作为默认网关
+ * 毫秒级极速检查当前是否已通过旁路由作为默认网关 (使用 route print，避免冷启动 PowerShell)
  */
 export function isConnectedToGateway(gatewayIp = '192.168.3.2') {
   try {
-    const out = execSync(`powershell -NoProfile -Command "(Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway }).IPv4DefaultGateway.NextHop"`, { encoding: 'utf8' });
+    const out = execSync('route print 0.0.0.0', { encoding: 'utf8', timeout: 1000 });
     return out.includes(gatewayIp);
   } catch {
     return false;
@@ -55,7 +49,7 @@ export function isConnectedToGateway(gatewayIp = '192.168.3.2') {
 }
 
 /**
- * 连接旁路由：自动读取当前 IP，将网卡默认网关直接指向 192.168.3.2，DNS 设为 192.168.3.2 与 223.5.5.5
+ * 连接旁路由：自动读取当前 IP，将网卡默认网关直接指向旁路由，DNS 设为 旁路由 与 223.5.5.5
  */
 export function connectGateway(gatewayIp = '192.168.3.2') {
   const iface = getActiveInterface();
@@ -64,16 +58,16 @@ export function connectGateway(gatewayIp = '192.168.3.2') {
 
   try {
     // 1. 设置网卡静态网关为旁路由 (保留当前 IP 与子网掩码不变)
-    execSync(`netsh interface ip set address name="${alias}" static ${ip} 255.255.255.0 ${gatewayIp} 1`, { stdio: 'pipe' });
+    execSync(`netsh interface ip set address name="${alias}" static ${ip} 255.255.255.0 ${gatewayIp} 1`, { stdio: 'pipe', timeout: 3000 });
 
     // 2. 设置首选 DNS 为旁路由，备选 DNS 为公共 DNS 223.5.5.5
-    execSync(`netsh interface ip set dns name="${alias}" static ${gatewayIp}`, { stdio: 'pipe' });
+    execSync(`netsh interface ip set dns name="${alias}" static ${gatewayIp}`, { stdio: 'pipe', timeout: 3000 });
     try {
-      execSync(`netsh interface ip add dns name="${alias}" 223.5.5.5 index=2`, { stdio: 'ignore' });
+      execSync(`netsh interface ip add dns name="${alias}" 223.5.5.5 index=2`, { stdio: 'ignore', timeout: 2000 });
     } catch {}
 
     // 3. 刷新系统 DNS 缓存
-    execSync('ipconfig /flushdns', { stdio: 'ignore' });
+    execSync('ipconfig /flushdns', { stdio: 'ignore', timeout: 2000 });
   } catch (err) {
     throw new Error(`切换网关与 DNS 失败(请确保以管理员权限运行): ${err.message}`);
   }
@@ -82,40 +76,45 @@ export function connectGateway(gatewayIp = '192.168.3.2') {
 }
 
 /**
- * 断开旁路由：一键恢复网卡为 DHCP 自动获取 IP 与自动获取 DNS (完全恢复主路由 192.168.3.1)
+ * 断开旁路由：一键恢复网卡为 DHCP 自动获取 IP 与自动获取 DNS (完全恢复主路由)
  */
 export function disconnectGateway(gatewayIp = '192.168.3.2') {
   const iface = getActiveInterface();
   const alias = iface.alias || '以太网';
 
-  try {
-    // 1. 恢复网卡 IP 与网关为 DHCP 自动获取
-    execSync(`netsh interface ip set address name="${alias}" source=dhcp`, { stdio: 'pipe' });
+  const ifacesToReset = Array.from(new Set([alias, '以太网', 'WLAN', 'Wi-Fi', 'Ethernet']));
 
-    // 2. 恢复网卡 DNS 为 DHCP 自动获取
-    execSync(`netsh interface ip set dns name="${alias}" source=dhcp`, { stdio: 'pipe' });
-
-    // 3. 清理可能残留的临时路由与刷新 DNS
-    try { execSync(`route delete 0.0.0.0 mask 128.0.0.0 ${gatewayIp}`, { stdio: 'ignore' }); } catch {}
-    try { execSync(`route delete 128.0.0.0 mask 128.0.0.0 ${gatewayIp}`, { stdio: 'ignore' }); } catch {}
-    try { execSync(`route delete 0.0.0.0 ${gatewayIp}`, { stdio: 'ignore' }); } catch {}
-    execSync('ipconfig /flushdns', { stdio: 'ignore' });
-  } catch (err) {
-    console.warn('恢复 DHCP 警告:', err.message);
+  for (const name of ifacesToReset) {
+    try {
+      execSync(`netsh interface ip set address name="${name}" source=dhcp`, { stdio: 'ignore', timeout: 3000 });
+      execSync(`netsh interface ip set dns name="${name}" source=dhcp`, { stdio: 'ignore', timeout: 3000 });
+    } catch {}
   }
+
+  // 清理可能残留的临时路由与刷新 DNS
+  try { execSync(`route delete 0.0.0.0 mask 128.0.0.0 ${gatewayIp}`, { stdio: 'ignore', timeout: 1500 }); } catch {}
+  try { execSync(`route delete 128.0.0.0 mask 128.0.0.0 ${gatewayIp}`, { stdio: 'ignore', timeout: 1500 }); } catch {}
+  try { execSync(`route delete 0.0.0.0 ${gatewayIp}`, { stdio: 'ignore', timeout: 1500 }); } catch {}
+  try { execSync('ipconfig /flushdns', { stdio: 'ignore', timeout: 1500 }); } catch {}
 
   return { ok: true, connected: false, gateway: gatewayIp };
 }
 
 /**
- * 测试到旁路由的 Ping 延迟
+ * 非阻塞异步测试到旁路由的 Ping 延迟
  */
 export function testPing(gatewayIp = '192.168.3.2') {
-  try {
-    const out = execSync(`ping -n 1 -w 800 ${gatewayIp}`, { encoding: 'utf8' });
-    const match = out.match(/time[=<](\d+)ms/i) || out.match(/时间[=<](\d+)ms/i);
-    return match ? Number(match[1]) : 1;
-  } catch {
-    return null;
+  const now = Date.now();
+  if (now - lastPingTime > 3000) {
+    lastPingTime = now;
+    exec(`ping -n 1 -w 600 ${gatewayIp}`, (err, stdout) => {
+      if (!err && stdout) {
+        const match = stdout.match(/time[=<](\d+)ms/i) || stdout.match(/时间[=<](\d+)ms/i);
+        cachedLatency = match ? Number(match[1]) : 1;
+      } else {
+        cachedLatency = null;
+      }
+    });
   }
+  return cachedLatency;
 }
