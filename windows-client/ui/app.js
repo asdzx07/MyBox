@@ -464,20 +464,6 @@ async function testAllLatency() {
 
 /* ------------------------------------------------------------- 订阅管理 (直推 Web 端) */
 
-function openSubModal() {
-  const modal = $('subModal');
-  if (modal) {
-    $('modalSubName').value = '';
-    $('modalSubUrl').value = '';
-    modal.classList.remove('hidden');
-    setTimeout(() => $('modalSubUrl')?.focus(), 60);
-  }
-}
-
-function closeSubModal() {
-  $('subModal')?.classList.add('hidden');
-}
-
 async function addSubscription(name, url) {
   name = (name || '').trim();
   url = (url || '').trim();
@@ -499,7 +485,6 @@ async function addSubscription(name, url) {
     });
     const count = res.nodeCount ?? 0;
     toast(`🎉 订阅添加成功！已解析 ${count} 个节点并自动部署生效`);
-    closeSubModal();
     if ($('inlineSubName')) $('inlineSubName').value = '';
     if ($('inlineSubUrl')) $('inlineSubUrl').value = '';
     await loadSubs();
@@ -616,19 +601,6 @@ async function refreshAllSubs() {
     await loadGroups();
   } catch (err) {
     toast(`批量刷新失败: ${err.message}`);
-  }
-}
-
-async function pruneOrphanNodes() {
-  if (!confirm('确定清理所有不属于现有订阅的游离/残留节点吗？清理后内核将自动热重载。')) return;
-  toast('正在清理残留节点并重新部署...');
-  try {
-    const res = await fetchRemote('/nodes/prune', { method: 'POST' });
-    toast(`清理完成！已移除 ${res.removedCount ?? 0} 个残留节点`);
-    await loadSubs();
-    await loadGroups();
-  } catch (err) {
-    toast(`清理失败: ${err.message}`);
   }
 }
 
@@ -919,7 +891,7 @@ function switchTab(name) {
   const sec = $(`sec-${name}`);
   if (sec) sec.classList.add('active');
 
-  const titleMap = { overview: '仪表', groups: '组', subs: '订阅', routing: '分流', conns: '连接', settings: '设置' };
+  const titleMap = { overview: '仪表', groups: '节点', subs: '订阅', routing: '分流', conns: '连接', settings: '设置' };
   $('pageTitle').textContent = titleMap[name] || '仪表';
 
   if (name === 'groups') loadGroups();
@@ -959,28 +931,17 @@ function bindEvents() {
     pollTraffic();
   });
 
-  // 节点组与延迟测速
+  // 节点列表与延迟测速
   $('btnReloadGroups')?.addEventListener('click', loadGroups);
   $('btnTestLatencyAll')?.addEventListener('click', testAllLatency);
-  $('btnGoToSubsPage')?.addEventListener('click', () => switchTab('subs'));
 
-  // 订阅弹窗与添加
-  $('btnOpenSubModal')?.addEventListener('click', openSubModal);
-  $('btnOpenAddSubViewModal')?.addEventListener('click', openSubModal);
-  $('btnCloseSubModal')?.addEventListener('click', closeSubModal);
-  $('btnCancelSubModal')?.addEventListener('click', closeSubModal);
-  $('btnConfirmAddSub')?.addEventListener('click', () => {
-    const name = $('modalSubName')?.value;
-    const url = $('modalSubUrl')?.value;
-    addSubscription(name, url);
-  });
+  // 订阅添加与刷新
   $('btnInlineAddSub')?.addEventListener('click', () => {
     const name = $('inlineSubName')?.value;
     const url = $('inlineSubUrl')?.value;
     addSubscription(name, url);
   });
   $('btnRefreshAllSubs')?.addEventListener('click', refreshAllSubs);
-  $('btnPruneNodes')?.addEventListener('click', pruneOrphanNodes);
 
   // 策略与连接
   $('btnSavePoliciesLocal')?.addEventListener('click', savePolicies);

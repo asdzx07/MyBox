@@ -187,25 +187,6 @@ app.get('/api/subscriptions', (req, res) => {
   });
 });
 
-/** 清理未关联任何现有订阅的孤儿节点并自动部署 */
-app.post('/api/nodes/prune', async (req, res) => {
-  let removedCount = 0;
-  mutateSettings((s) => {
-    const validSubIds = new Set(s.subscriptions.map((x) => x.id));
-    const before = s.nodes.length;
-    // 只保留确实属于当前有效订阅的节点
-    s.nodes = s.nodes.filter((n) => n.__subscriptionId && validSubIds.has(n.__subscriptionId));
-    removedCount = before - s.nodes.length;
-  });
-  try {
-    await deploy.deploy({ restart: true });
-  } catch (err) {
-    log.warn('清理节点后自动部署告警：%s', err.message);
-  }
-  log.info('已清理孤儿/未关联节点 %d 个并已重新部署', removedCount);
-  res.json({ ok: true, removedCount });
-});
-
 app.post('/api/subscriptions', async (req, res) => {
   const { name, url } = req.body || {};
   if (!url || !/^https?:\/\//i.test(url)) return res.status(400).json({ error: '请填写 http(s) 订阅地址' });
