@@ -1,5 +1,7 @@
 node_modules/
 runtime/
+windows-client/build/
+windows-client/config.json
 *.log
 .DS_Store
 data/

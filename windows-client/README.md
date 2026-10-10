@@ -97,3 +97,17 @@ MyBox.exe
 |   [ MyBox 后端管理 API ] (/api/status, /api/groups, /api/policies)|
 +-----------------------------------------------------------------+
 ```
+
+---
+
+## 从源码构建启动器
+
+构建环境：Windows 10/11、Visual Studio Build Tools（MSBuild）和 .NET Framework 4.8 Developer Pack。项目不依赖第三方 NuGet 包。
+
+在此目录运行：
+
+```bat
+build.cmd
+```
+
+构建产物位于 `build\Release\MyBox.exe`。项目会同时复制 `core/`、`ui/`、图标、网络恢复脚本和由 `config.example.json` 生成的默认 `config.json`；发布时应将这些文件与 `MyBox.exe` 一起打包。示例配置不包含旁路由密码或会话 Cookie；客户端运行后产生的 `config.json` 属于本地凭据文件，已在 `.gitignore` 中排除，不要提交到仓库。
