@@ -378,11 +378,13 @@ async function loadGroups() {
               <div class="node-pill ${isActive ? 'active' : ''}" onclick="selectNode('${escapeHtml(g.name)}', '${escapeHtml(m)}')">
                 <div class="node-pill-top">
                   <span class="node-name-text" title="${escapeHtml(m)}">${escapeHtml(m)}</span>
-                  <span class="latency-badge ${latClass}" title="点击单独测试延迟" onclick="event.stopPropagation(); testSingleLatency('${escapeHtml(m)}')">${latText}</span>
+                  <div class="node-pill-top-right">
+                    <span class="latency-badge ${latClass}" title="点击单独测试延迟" onclick="event.stopPropagation(); testSingleLatency('${escapeHtml(m)}')">${latText}</span>
+                    ${isActive ? '<span class="node-check-mark">✓</span>' : ''}
+                  </div>
                 </div>
                 <div class="node-pill-bottom">
                   <span class="node-proto-tag">${escapeHtml(proto)}</span>
-                  ${isActive ? '<span class="node-check-ic">✓</span>' : ''}
                 </div>
               </div>
             `;
@@ -786,10 +788,28 @@ async function loadConnections() {
   }
 }
 
+let localIgnoredConnIds = new Set();
+let isLocalConnViewCleared = false;
+
+window.clearLocalConnectionRecords = function() {
+  const conns = remoteData.connections || [];
+  conns.forEach(c => { if (c.id) localIgnoredConnIds.add(c.id); });
+  isLocalConnViewCleared = true;
+  renderConnections();
+  toast('已清空当前连接记录，正在监听新连接…');
+};
+
+window.resetLocalConnectionRecords = function() {
+  localIgnoredConnIds.clear();
+  isLocalConnViewCleared = false;
+  loadConnections();
+};
+
 function renderConnections() {
   const container = $('connsListContainer');
   const kw = ($('connSearchLocal')?.value || '').toLowerCase().trim();
-  const conns = remoteData.connections || [];
+  const allConns = remoteData.connections || [];
+  const conns = isLocalConnViewCleared ? allConns.filter(c => !localIgnoredConnIds.has(c.id)) : allConns;
 
   $('dispConnCount').textContent = conns.length;
 
@@ -803,7 +823,16 @@ function renderConnections() {
     : conns;
 
   if (!filtered.length) {
-    container.innerHTML = '<p class="empty-tip">当前没有活动连接</p>';
+    if (isLocalConnViewCleared) {
+      container.innerHTML = `
+        <div style="padding:24px 0;text-align:center">
+          <p class="empty-tip" style="margin-bottom:8px">当前页面记录已清空，正在监听新接入的连接…</p>
+          <button class="small-btn" onclick="resetLocalConnectionRecords()">恢复显示全部连接</button>
+        </div>
+      `;
+    } else {
+      container.innerHTML = '<p class="empty-tip">当前没有活动连接</p>';
+    }
     return;
   }
 
@@ -826,11 +855,11 @@ function renderConnections() {
 }
 
 async function closeAllConnections() {
-  if (!confirm('确定断开所有当前活动连接？（客户端会自动重连）')) return;
+  if (!confirm('确定彻底断开内核中的所有当前活动连接？（客户端会自动重连）')) return;
   try {
     await fetchRemote('/connections', { method: 'DELETE' });
-    toast('已清空所有连接');
-    await loadConnections();
+    toast('已断开所有连接');
+    resetLocalConnectionRecords();
   } catch (err) {
     toast(`断开失败: ${err.message}`);
   }
@@ -979,9 +1008,10 @@ function bindEvents() {
 
   $('connSearchLocal')?.addEventListener('input', renderConnections);
   $('connSearchLocal')?.addEventListener('search', renderConnections);
-  $('btnClearConnSearchLocal')?.addEventListener('click', closeAllConnections);
+  $('btnClearRecordsLocal')?.addEventListener('click', clearLocalConnectionRecords);
+  $('btnClearConnSearchLocal')?.addEventListener('click', clearLocalConnectionRecords);
   $('btnCloseAllConnsLocal')?.addEventListener('click', closeAllConnections);
-  $('btnReloadConnsLocal')?.addEventListener('click', loadConnections);
+  $('btnReloadConnsLocal')?.addEventListener('click', resetLocalConnectionRecords);
 
   $('cfgMinimizeToTray')?.addEventListener('change', async () => {
     const minimizeToTray = !!$('cfgMinimizeToTray').checked;

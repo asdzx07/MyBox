@@ -468,13 +468,30 @@ async function loadOverviewGroups() {
 /* --------------------------------------------------------------- 当前连接 */
 
 let connCache = { connections: [], uploadTotal: 0, downloadTotal: 0 };
+let ignoredConnIds = new Set();
+let isConnViewCleared = false;
+
+window.clearConnectionRecords = function() {
+  const conns = connCache.connections || [];
+  conns.forEach(c => { if (c.id) ignoredConnIds.add(c.id); });
+  isConnViewCleared = true;
+  renderConnections();
+  toast('已清空当前连接记录，正在监听新连接…');
+};
+
+window.resetConnectionRecords = function() {
+  ignoredConnIds.clear();
+  isConnViewCleared = false;
+  loadConnectionsPage();
+};
 
 function renderConnections() {
   const countEl = $('connPageCount');
   const listEl = $('connsList');
   if (!listEl) return;
 
-  const conns = connCache.connections || [];
+  const allConns = connCache.connections || [];
+  const conns = isConnViewCleared ? allConns.filter(c => !ignoredConnIds.has(c.id)) : allConns;
   const query = ($('connSearch')?.value || '').trim().toLowerCase();
 
   const filtered = query
@@ -492,16 +509,25 @@ function renderConnections() {
 
   if (countEl) {
     if (query) {
-      countEl.textContent = `匹配 ${filtered.length} / 共 ${conns.length} 条连接`;
+      countEl.textContent = `匹配 ${filtered.length} / 当前 ${conns.length} 条连接`;
     } else {
-      countEl.textContent = `${conns.length} 条连接 · 累计 ↓ ${fmtBytes(connCache.downloadTotal || 0)} / ↑ ${fmtBytes(connCache.uploadTotal || 0)}`;
+      countEl.textContent = `${conns.length} 条连接 · 累计 ↓ ${fmtBytes(connCache.downloadTotal || 0)} / ↑ ${fmtBytes(connCache.uploadTotal || 0)}${isConnViewCleared ? ' (已过滤历史记录)' : ''}`;
     }
   }
 
   if (!filtered.length) {
-    listEl.innerHTML = query
-      ? '<p class="note" style="padding:16px 0;text-align:center">未找到匹配的连接</p>'
-      : '<p class="note" style="padding:16px 0;text-align:center">当前没有活动连接</p>';
+    if (isConnViewCleared) {
+      listEl.innerHTML = `
+        <div style="padding:28px 0;text-align:center">
+          <p class="note" style="margin-bottom:10px">当前页面记录已清空，正在监听新接入的连接…</p>
+          <button class="small" onclick="resetConnectionRecords()">恢复显示全部连接</button>
+        </div>
+      `;
+    } else {
+      listEl.innerHTML = query
+        ? '<p class="note" style="padding:16px 0;text-align:center">未找到匹配的连接</p>'
+        : '<p class="note" style="padding:16px 0;text-align:center">当前没有活动连接</p>';
+    }
     return;
   }
 
@@ -1415,11 +1441,11 @@ function bindEvents() {
   });
 
   // 连接页
-  $('btnConnsRefresh')?.addEventListener('click', (e) => withBusy(e.currentTarget, loadConnectionsPage));
+  $('btnConnsRefresh')?.addEventListener('click', (e) => withBusy(e.currentTarget, resetConnectionRecords));
   $('btnCloseAllConns')?.addEventListener('click', closeAllConnections);
   $('connSearch')?.addEventListener('input', renderConnections);
   $('connSearch')?.addEventListener('search', renderConnections);
-  $('btnClearConnSearch')?.addEventListener('click', closeAllConnections);
+  $('btnClearConnRecords')?.addEventListener('click', clearConnectionRecords);
 
   // 订阅页
   $('btnAddSub').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {

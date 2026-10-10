@@ -216,11 +216,11 @@
           <p class="note" style="margin-top:2px">展示由 sing-box 透明代理接管的实时活动连接与流量传输</p>
         </div>
         <div class="head-actions">
-          <button class="small danger" id="btnCloseAllConns" title="清空并断开所有当前活动连接">
+          <button class="small danger" id="btnCloseAllConns" title="彻底断开并清空所有当前活动连接">
             <svg class="btn-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            清空连接
+            断开所有连接
           </button>
-          <button class="small" id="btnConnsRefresh">
+          <button class="small" id="btnConnsRefresh" title="恢复显示并刷新所有连接">
             <svg class="btn-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
             刷新
           </button>
@@ -231,7 +231,7 @@
         <div class="card-head" style="flex-wrap:wrap;gap:10px">
           <div style="display:flex;align-items:center;gap:6px;flex:1 1 260px">
             <input type="search" id="connSearch" placeholder="搜索连接 (域名/IP/规则/链路)..." style="font-size:12px;padding:5px 10px;height:32px;flex:1;max-width:320px">
-            <button class="small danger" id="btnClearConnSearch" style="height:32px;padding:0 12px" title="清空并断开当前所有活动连接">清空所有连接</button>
+            <button class="small" id="btnClearConnRecords" style="height:32px;padding:0 12px" title="清空当前页面显示的连接记录，方便观察后续新产生的连接">清空记录</button>
           </div>
           <div class="spacer"></div>
           <span class="note" id="connPageCount"></span>

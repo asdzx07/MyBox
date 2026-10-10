@@ -309,7 +309,7 @@ header.top-header {
 }
 
 .mini-btn {
-  background: #18181b;
+  background: #1e293b;
   color: #fff;
   border: none;
   border-radius: 6px;
@@ -321,7 +321,7 @@ header.top-header {
 }
 
 .mini-btn:hover {
-  background: #27272a;
+  background: #334155;
 }
 
 .info-row:last-child { margin-bottom: 0; }
@@ -353,7 +353,7 @@ header.top-header {
 }
 
 .btn-toggle-gw {
-  background: #18181b;
+  background: #1e293b;
   color: #fff;
   border: none;
   padding: 9px 18px;
@@ -372,7 +372,7 @@ header.top-header {
 }
 
 .btn-toggle-gw:hover {
-  filter: brightness(1.15);
+  background: #334155;
 }
 
 /* 面板通用大卡片 */
@@ -420,13 +420,13 @@ header.top-header {
 }
 
 .small-btn.primary {
-  background: #18181b;
+  background: #1e293b;
   color: #ffffff;
-  border-color: #18181b;
+  border-color: #1e293b;
 }
 
 .small-btn.primary:hover {
-  background: #27272a;
+  background: #334155;
 }
 
 .small-btn.danger {
@@ -604,13 +604,13 @@ header.top-header {
 }
 
 .mini-btn.primary-mini {
-  background: #111;
+  background: #1e293b;
   color: #fff;
-  border-color: #111;
+  border-color: #1e293b;
   font-weight: 500;
 }
 .mini-btn.primary-mini:hover {
-  background: #333;
+  background: #334155;
 }
 
 /* 未认证引导卡片 */
@@ -720,14 +720,18 @@ header.top-header {
   text-transform: uppercase;
 }
 
-.node-pill.active .node-proto-tag {
-  color: #475569;
+.node-pill-top-right {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
 }
 
-.node-check-ic {
-  font-size: 11px;
+.node-check-mark {
+  font-size: 12px;
   font-weight: 800;
   color: #0f172a;
+  line-height: 1;
 }
 
 .latency-badge {
