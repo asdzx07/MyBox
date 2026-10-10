@@ -18,6 +18,7 @@ let config = {
   password: '',
   sessionCookie: '',
   autoConnect: false,
+  minimizeToTray: true,
 };
 
 try {
@@ -100,8 +101,9 @@ let lastHeartbeat = Date.now();
 let clientConnected = false;
 
 setInterval(() => {
-  if (clientConnected && Date.now() - lastHeartbeat > 12000) {
-    console.log('[MyBox Windows Companion] 检测到前端界面已关闭(心跳超时)，正在还原网络并安全退出...');
+  // 仅在未启用托盘常驻模式时，前端心跳超时才自动退出
+  if (!config.minimizeToTray && clientConnected && Date.now() - lastHeartbeat > 12000) {
+    console.log('[MyBox Windows Companion] 检测到前端界面已关闭且未启用托盘常驻，正在还原网络并安全退出...');
     try {
       disconnectGateway(config.gatewayIp);
     } catch {}
@@ -132,6 +134,7 @@ const server = http.createServer(async (req, res) => {
       gatewayIp: config.gatewayIp,
       gatewayPort: config.gatewayPort,
       autoConnect: config.autoConnect,
+      minimizeToTray: config.minimizeToTray !== false,
       hasPassword: Boolean(config.password),
       password: config.password || '',
       hasSession: Boolean(config.sessionCookie),
