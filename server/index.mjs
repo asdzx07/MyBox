@@ -193,6 +193,11 @@ app.post('/api/subscriptions', async (req, res) => {
   });
   try {
     const result = await refreshSubscription(id);
+    try {
+      await deploy.deploy({ restart: true });
+    } catch (depErr) {
+      log.warn('添加订阅后自动部署告警：%s', depErr.message);
+    }
     res.json({ id, ...result });
   } catch (err) {
     res.status(502).json({ id, error: `订阅已保存，但拉取失败：${err.message}` });

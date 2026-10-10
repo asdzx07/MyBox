@@ -670,3 +670,217 @@ header.top-header {
 .auth-error-hint.hidden {
   display: none;
 }
+
+/* 延迟 Badge 样式 */
+.node-pill-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.node-pill {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.15s;
+  user-select: none;
+}
+
+.node-pill:hover {
+  border-color: #a1a1aa;
+}
+
+.node-pill.active {
+  background: #18181b;
+  color: #fff;
+  border-color: #18181b;
+}
+
+.node-name-text {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-right: 8px;
+}
+
+.node-pill-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.latency-badge {
+  font-size: 10.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  background: #f4f4f5;
+  color: #71717a;
+  transition: background 0.15s, color 0.15s;
+}
+
+.node-pill.active .latency-badge {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.latency-badge.fast {
+  background: #ecfdf5;
+  color: #059669;
+}
+.node-pill.active .latency-badge.fast {
+  background: #059669;
+  color: #fff;
+}
+
+.latency-badge.medium {
+  background: #eff6ff;
+  color: #2563eb;
+}
+.node-pill.active .latency-badge.medium {
+  background: #2563eb;
+  color: #fff;
+}
+
+.latency-badge.slow {
+  background: #fffbeb;
+  color: #d97706;
+}
+.node-pill.active .latency-badge.slow {
+  background: #d97706;
+  color: #fff;
+}
+
+.latency-badge.error {
+  background: #fef2f2;
+  color: #dc2626;
+}
+.node-pill.active .latency-badge.error {
+  background: #dc2626;
+  color: #fff;
+}
+
+.latency-badge.testing {
+  background: #f3f4f6;
+  color: #9ca3af;
+  animation: pulse 1s infinite alternate;
+}
+
+@keyframes pulse {
+  from { opacity: 0.5; }
+  to { opacity: 1; }
+}
+
+/* 模态弹窗 */
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.modal-backdrop.hidden {
+  display: none;
+}
+
+.modal-card {
+  background: #fff;
+  border-radius: 14px;
+  width: 90%;
+  max-width: 480px;
+  box-shadow: 0 12px 36px rgba(0,0,0,0.22);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: modalIn 0.18s ease-out;
+}
+
+@keyframes modalIn {
+  from { transform: scale(0.96) translateY(8px); opacity: 0; }
+  to { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+.modal-head {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-close {
+  font-size: 20px;
+  color: #9ca3af;
+  cursor: pointer;
+  line-height: 1;
+}
+.modal-close:hover {
+  color: #111;
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.modal-foot {
+  padding: 14px 20px;
+  background: #fafafa;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* 订阅列表卡片 */
+.sub-item-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  background: #fff;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sub-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sub-item-title {
+  font-weight: 600;
+  font-size: 13.5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sub-item-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.sub-item-actions {
+  display: flex;
+  gap: 8px;
+}
+
