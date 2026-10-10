@@ -167,10 +167,10 @@ const server = http.createServer(async (req, res) => {
           return;
         }
         const authRes = await loginRemoteGateway(pwd, config.gatewayIp);
-        res.writeHead(authRes.ok ? 200 : 400, { 'Content-Type': 'application/json' });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ...authRes, config }));
       } catch (err) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: false, error: err.message }));
       }
     });
@@ -214,7 +214,7 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true, config }));
       } catch (err) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: false, error: err.message }));
       }
     });
@@ -251,8 +251,8 @@ const server = http.createServer(async (req, res) => {
     delete proxyHeaders['host'];
     proxyHeaders['host'] = `${config.gatewayIp}:${config.gatewayPort}`;
 
-    // 自动补齐已记录的旁路由 Session Cookie
-    if (!proxyHeaders['cookie'] && config.sessionCookie) {
+    // 关键修复：强制注入已保存的旁路由 Session Cookie，不受浏览器本地 Cookie 干扰
+    if (config.sessionCookie) {
       proxyHeaders['cookie'] = config.sessionCookie;
     }
 

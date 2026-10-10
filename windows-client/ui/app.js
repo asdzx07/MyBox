@@ -113,17 +113,17 @@ async function saveAndAuth(ip, password) {
   password = (password !== undefined ? password : '').trim();
 
   try {
-    toast(`正在连接旁路由 (${ip}) 验证配置...`);
+    toast(`正在连接旁路由 (${ip}) 验证密码...`);
     const res = await fetchLocal('/api/local/auth', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gatewayIp: ip, password }),
     });
 
-    if (!res.ok) {
+    if (!res || !res.ok) {
       localState.authed = false;
       renderAuthBadge();
-      toast(`登录失败: ${res.error || '密码错误，请检查旁路由管理密码'}`);
+      toast(res?.error || '登录失败: 密码错误，请检查旁路由管理密码');
       return false;
     }
 
@@ -134,7 +134,7 @@ async function saveAndAuth(ip, password) {
     localState.authed = true;
 
     renderAuthBadge();
-    toast(password ? '旁路由认证成功！已同步节点与策略' : '已保存旁路由 IP 配置');
+    toast(password ? '认证成功！节点与策略已就绪' : '已保存旁路由 IP 配置');
 
     // 重新同步并加载业务数据
     await syncLocalStatus();
@@ -146,7 +146,7 @@ async function saveAndAuth(ip, password) {
   } catch (err) {
     localState.authed = false;
     renderAuthBadge();
-    toast(`连接失败: ${err.message}`);
+    toast(`验证失败: ${err.message}`);
     return false;
   }
 }
@@ -164,7 +164,9 @@ async function syncLocalStatus() {
       localState.activeInterface = data.interface || {};
       localState.hasPassword = !!data.hasPassword;
       localState.hasSession = !!data.hasSession;
-      if (data.password !== undefined) localState.password = data.password;
+      if (data.password !== undefined && !localState.password) {
+        localState.password = data.password;
+      }
 
       if ($('cfgAutoConnect') && data.autoConnect !== undefined) {
         $('cfgAutoConnect').checked = !!data.autoConnect;
@@ -186,17 +188,18 @@ function renderStatusUI() {
   const btnGwText = $('btnGwText');
 
   const curIp = localState.gatewayIp || '192.168.3.2';
-  if ($('quickGwIp') && document.activeElement !== $('quickGwIp')) {
+  // 保护用户正在输入的输入框，绝不覆盖已有内容
+  if ($('quickGwIp') && !$('quickGwIp').value) {
     $('quickGwIp').value = curIp;
   }
-  if ($('quickGwPassword') && document.activeElement !== $('quickGwPassword')) {
-    $('quickGwPassword').value = localState.password || '';
+  if ($('quickGwPassword') && !$('quickGwPassword').value && localState.password) {
+    $('quickGwPassword').value = localState.password;
   }
-  if ($('cfgGatewayIp') && document.activeElement !== $('cfgGatewayIp')) {
+  if ($('cfgGatewayIp') && !$('cfgGatewayIp').value) {
     $('cfgGatewayIp').value = curIp;
   }
-  if ($('cfgPanelPassword') && document.activeElement !== $('cfgPanelPassword')) {
-    $('cfgPanelPassword').value = localState.password || '';
+  if ($('cfgPanelPassword') && !$('cfgPanelPassword').value && localState.password) {
+    $('cfgPanelPassword').value = localState.password;
   }
 
   renderAuthBadge();

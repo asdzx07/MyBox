@@ -37,12 +37,21 @@ export function getActiveInterface() {
 }
 
 /**
- * 毫秒级极速检查当前是否已通过旁路由作为默认网关 (使用 route print，避免冷启动 PowerShell)
+ * 毫秒级精确检查当前是否已通过旁路由作为默认网关 (精确匹配路由表网关列，杜绝误判本机 IP)
  */
 export function isConnectedToGateway(gatewayIp = '192.168.3.2') {
   try {
-    const out = execSync('route print 0.0.0.0', { encoding: 'utf8', timeout: 1000 });
-    return out.includes(gatewayIp);
+    const out = execSync('route print 0.0.0.0', { encoding: 'utf8', timeout: 1500 });
+    for (const line of out.split('\n')) {
+      const parts = line.trim().split(/\s+/);
+      if (parts.length >= 5 && parts[0] === '0.0.0.0' && parts[1] === '0.0.0.0') {
+        const gw = parts[2];
+        if (gw === gatewayIp) {
+          return true;
+        }
+      }
+    }
+    return false;
   } catch {
     return false;
   }
