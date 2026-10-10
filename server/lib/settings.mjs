@@ -35,7 +35,7 @@ export const DEFAULT_POLICIES = [
       'jsonp-ip.com', 'sspanel.net', 'yalala.com', 'whois.pconline.com.cn', 'b0.upaiyun.com',
     ],
     ipCidr: [],
-    target: 'all-auto',
+    target: 'all-manual',
   },
   { id: 'p-ai', name: 'AI', enabled: true, rulesets: ['geosite-category-ai-!cn'], domain: [], domainSuffix: [], ipCidr: [], target: 'all-auto' },
   { id: 'p-youtube', name: 'Youtube', enabled: true, rulesets: ['geosite-youtube'], domain: [], domainSuffix: [], ipCidr: [], target: 'all-auto' },

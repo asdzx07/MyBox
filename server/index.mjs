@@ -731,7 +731,11 @@ app.put('/api/nodes/select', async (req, res) => {
       method: 'PUT',
       body: JSON.stringify({ name }),
     });
-    log.info('切换分组 %s → %s', group, name);
+    // 切换节点后主动关闭所有已有活动连接，防止浏览器 Keep-Alive 复用旧连接导致 IP 迟迟不更新
+    try {
+      await clashApi('/connections', { method: 'DELETE' });
+    } catch {}
+    log.info('切换分组 %s → %s 并已清空旧连接', group, name);
     res.json({ ok: true, group, name });
   } catch (err) {
     res.status(502).json({ error: `切换失败：${err.message}` });
