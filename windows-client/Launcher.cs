@@ -40,7 +40,7 @@ namespace MyBox.Client
                 string browserExe = FindBrowserExecutable();
                 if (!string.IsNullOrEmpty(browserExe))
                 {
-                    LaunchAppWindow(browserExe, false);
+                    LaunchAppWindow(browserExe);
                 }
                 return;
             }
@@ -91,8 +91,23 @@ namespace MyBox.Client
                     }
                 }
 
-                // 6. 启动原生风格的应用窗口并等待用户关闭
-                LaunchAppWindow(browserExe, true);
+                // 6. 启动原生风格的应用窗口
+                LaunchAppWindow(browserExe);
+
+                // 7. 守护等待：只要前端窗口在运行，前端就会持续发送心跳保活本地伴侣服务；
+                // 当用户关闭前端窗口时，前端通知退出或心跳超时，伴侣服务安全退出后随之结束。
+                if (nodeProcess != null && !nodeProcess.HasExited)
+                {
+                    nodeProcess.WaitForExit();
+                }
+                else
+                {
+                    // 若伴侣服务由独立实例维护，循环等待直到端口释放
+                    while (IsPortOccupiedTcp(3038))
+                    {
+                        Thread.Sleep(1000);
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -246,7 +261,7 @@ namespace MyBox.Client
             catch { }
         }
 
-        private static void LaunchAppWindow(string browserExe, bool waitForExit)
+        private static void LaunchAppWindow(string browserExe)
         {
             string profileDir = Path.Combine(appDir, ".profile");
             string appUrl = "http://127.0.0.1:3038";
@@ -260,11 +275,7 @@ namespace MyBox.Client
                 UseShellExecute = false
             };
 
-            Process browserProc = Process.Start(psi);
-            if (waitForExit && browserProc != null)
-            {
-                browserProc.WaitForExit();
-            }
+            Process.Start(psi);
         }
 
         private static void OnProcessExit(object sender, EventArgs e)
