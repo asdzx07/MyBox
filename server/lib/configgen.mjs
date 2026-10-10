@@ -193,7 +193,7 @@ function buildOutbounds(settings) {
     // 关键拦截：如果节点关联了订阅，但该订阅不在启用列表中（已被删除或已停用），绝不进配置
     if (n.__subscriptionId && !enabledSubIds.has(n.__subscriptionId)) continue;
     tags.add(n.tag);
-    outbounds.push(clean(n));
+    outbounds.push(n);
   }
 
   for (const b of BUILTIN_OUTBOUND_LIST) {
@@ -204,6 +204,7 @@ function buildOutbounds(settings) {
   }
 
   const nodeTags = [...tags].filter((t) => !BUILTIN_OUTBOUND_LIST.some((b) => b.tag === t));
+  let lowerNodeTags;
 
   for (const g of settings.groups) {
     if (!g.enabled) continue;
@@ -211,11 +212,18 @@ function buildOutbounds(settings) {
     const keywords = (g.keywords || []).filter(Boolean);
 
     // 动态组：按关键词自动收编节点；没配关键词就是收编全部
-    let members = isDynamic
-      ? (keywords.length
-        ? nodeTags.filter((t) => keywords.some((k) => t.toLowerCase().includes(String(k).toLowerCase())))
-        : [...nodeTags])
-      : (g.members || []).filter((t) => tags.has(t));
+    let members;
+    if (isDynamic && keywords.length) {
+      lowerNodeTags ??= nodeTags.map((tag) => tag.toLowerCase());
+      const lowerKeywords = keywords.map((keyword) => String(keyword).toLowerCase());
+      members = nodeTags.filter((_, index) =>
+        lowerKeywords.some((keyword) => lowerNodeTags[index].includes(keyword)),
+      );
+    } else if (isDynamic) {
+      members = [...nodeTags];
+    } else {
+      members = (g.members || []).filter((t) => tags.has(t));
+    }
 
     // 自动择优组没配成员时收编全部节点，否则组是空的、选了它就没网
     if (g.type === 'urltest' && members.length === 0) members = [...nodeTags];

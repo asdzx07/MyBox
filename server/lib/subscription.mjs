@@ -109,6 +109,8 @@ function parseVless(url) {
   const p = u.searchParams;
   const flow = p.get('flow') || '';
   const security = (p.get('security') || '').toLowerCase();
+  const transport = buildTransport(p, p.get('type'));
+  const tls = buildTLS(p, { defaultSni: cleanHost(u.hostname), reality: security === 'reality' });
   return {
     type: 'vless',
     tag: decodeURIComponent(u.hash.slice(1)) || `${cleanHost(u.hostname)}:${u.port}`,
@@ -116,8 +118,8 @@ function parseVless(url) {
     server_port: toInt(u.port, 443),
     uuid: decodeURIComponent(u.username),
     ...(flow ? { flow } : {}),
-    ...(buildTransport(p, p.get('type')) ? { transport: buildTransport(p, p.get('type')) } : {}),
-    ...(buildTLS(p, { defaultSni: cleanHost(u.hostname), reality: security === 'reality' }) ? { tls: buildTLS(p, { defaultSni: cleanHost(u.hostname), reality: security === 'reality' }) } : {}),
+    ...(transport ? { transport } : {}),
+    ...(tls ? { tls } : {}),
   };
 }
 
@@ -134,6 +136,7 @@ function parseVmess(url) {
     fp: j.fp || '',
   });
   const transport = buildTransport(p, j.net);
+  const tls = buildTLS(p, { defaultSni: j.host || j.add });
   return {
     type: 'vmess',
     tag: j.ps || `${j.add}:${j.port}`,
@@ -143,7 +146,7 @@ function parseVmess(url) {
     security: j.scy || 'auto',
     alter_id: toInt(j.aid, 0),
     ...(transport ? { transport } : {}),
-    ...(buildTLS(p, { defaultSni: j.host || j.add }) ? { tls: buildTLS(p, { defaultSni: j.host || j.add }) } : {}),
+    ...(tls ? { tls } : {}),
   };
 }
 
